@@ -233,6 +233,40 @@ Fields are stable and typed. `suggestions` is a plain string array designed for 
 - Baseline comparison (cost vs similar tasks)
 - Parallelization analysis in Tool Discipline
 
+## Known Limitations
+
+### Hermes SQLite Adapter (lossy by design)
+
+The Hermes adapter maps the real Hermes DB schema (`sessions` + `messages` tables) to the canonical trace format. It is **honest and lossy** — it populates what exists and nulls what doesn't. It does **not** synthesize span IDs, fabricate relationships, or guess at missing data.
+
+**Fields the Hermes schema does not provide:**
+
+| Missing field | Impact on scoring |
+|--------------|-------------------|
+| `error_type` | Reliability judge counts errors but can't classify them |
+| `retrieval_entrypoint`, `retrieval_steps` | Retrieval judge always scores 50.0 (no entrypoint) |
+| `context_pressure_pct`, `context_tokens` | Context judge returns unscorable — weights redistributed |
+| `latency_ms` | Efficiency can't penalize slow tool calls |
+| `span_id`, `parent_span_id` | No trace-level deduplication or call tree analysis |
+| `cost_estimate` (Hermes stores in sessions, not events) | Efficiency cost sub-score unavailable |
+
+**What this means for Hermes users:**
+- Retrieval score will always be 50.0 (the no-entrypoint baseline) — this is correct behavior, not a bug
+- Context judge will show `N/A (low)` — the weight (10%) redistributes to other judges
+- Errors embedded in tool result content (e.g., `"error": "File not found"`) are not parsed by the adapter — you must add `status: "error"` to the JSONL if you want them scored
+
+### Generic JSONL Adapter
+
+- Requires the canonical field names (`event_type`, `status`, `tool_name`, etc.)
+- Fields not present are simply absent — no synthetic values
+- Does not parse proprietary trace formats (OpenAI, LangSmith) — use those formats' native tools to export to canonical JSONL first
+
+### Scoring
+
+- Scores are relative to the trace content, not to a baseline of "similar tasks"
+- Tool Discipline does not yet analyze parallel tool calls
+- Weight redistribution is proportional — some users may want custom profiles
+
 ## What This Is NOT
 
 - A dashboard — CLI-first, local-first
