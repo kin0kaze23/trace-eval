@@ -1,0 +1,15 @@
+$ trace-eval ci examples/hermes_good.jsonl --min-score 80
+
+PASS
+============================================================
+  TRACE-EVAL SCORECARD  Total: 98.9/100
+============================================================
+
+DIMENSION SCORES:
+  reliability           100.0  (high)
+  efficiency             94.5  (medium)
+  retrieval             100.0  (high)
+  tool_discipline       100.0  (high)
+  context               100.0  (high)
+
+(exit code: 0)

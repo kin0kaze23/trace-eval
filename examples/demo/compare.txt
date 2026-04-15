@@ -1,0 +1,18 @@
+$ trace-eval compare examples/before.jsonl examples/after.jsonl
+
+COMPARISON: before vs after
+=======================================================
+  Total score:   67.5 ->   99.3
+  Change:      +31.9 (improved)
+
+  reliability            45.0 ->  100.0  ^ +55.0
+  efficiency             93.5 ->   96.8  ^ +3.2
+  retrieval              50.0 ->  100.0  ^ +50.0
+  tool_discipline        90.0 ->  100.0  ^ +10.0
+  context                95.0 ->  100.0  ^ +5.0
+
+  FLAG CHANGES:
+    [RESOLVED] reliability_errors
+    [RESOLVED] reliability_terminal_partial
+    [RESOLVED] retrieval_no_entrypoint
+    [RESOLVED] tool_retries

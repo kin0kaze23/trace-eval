@@ -1,0 +1,21 @@
+$ trace-eval run examples/hermes_good.jsonl
+
+============================================================
+  TRACE-EVAL SCORECARD  Total: 98.9/100
+============================================================
+
+DIMENSION SCORES:
+  reliability           100.0  (high)
+  efficiency             94.5  (medium)
+  retrieval             100.0  (high)
+  tool_discipline       100.0  (high)
+  context               100.0  (high)
+
+ADAPTER CAPABILITY REPORT:
+  has_span_ids: False
+  has_parent_spans: False
+  has_event_latency: True
+  has_token_data: True
+  has_tool_calls: True
+  has_cost_data: True
+  has_retrieval_fields: True

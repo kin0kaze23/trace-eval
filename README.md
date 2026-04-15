@@ -13,8 +13,68 @@ Run `trace-eval` on an agent trace file and get:
 - **Actionable suggestions** — what to fix, not just that something broke
 - **Before/after comparison** — see if your changes actually improved things
 
-```
+## See It in Action
+
+```bash
+# 1. Install (uv or pip)
+uv sync --all-extras
+
+# 2. Validate a trace file
+trace-eval validate trace.jsonl
+# Schema validation PASSED — 8 events, field coverage bars printed
+
+# 3. Run a scorecard
 trace-eval run trace.jsonl
+# ============================================================
+#   TRACE-EVAL SCORECARD  Total: 32.4/100
+# ============================================================
+#
+# LIKELY ROOT CAUSES:
+#   - Use canonical retrieval entrypoint
+#   - Stop accessing deprecated files
+#   - Context pressure exceeded 90% — reduce prompt size
+#
+# DIMENSION SCORES:
+#   reliability             5.0  (high)
+#   efficiency             77.4  (medium)
+#   retrieval               0.0  (high)
+#   tool_discipline        80.0  (high)
+#   context                32.0  (high)
+
+# 4. Compare before vs after a fix
+trace-eval compare before.jsonl after.jsonl
+# Total score: 67.5 -> 99.3  Change: +31.9 (improved)
+#
+# FLAG CHANGES:
+#   [RESOLVED] reliability_errors
+#   [RESOLVED] retrieval_no_entrypoint
+#   [RESOLVED] tool_retries
+
+# 5. CI gate — fails the build below a threshold
+trace-eval ci trace.jsonl --min-score 80
+# PASS (exit 0) or FAIL (exit 1)
+```
+
+### Good Run
+
+```
+trace-eval run examples/hermes_good.jsonl
+============================================================
+  TRACE-EVAL SCORECARD  Total: 98.9/100
+============================================================
+
+DIMENSION SCORES:
+  reliability           100.0  (high)
+  efficiency             94.5  (medium)
+  retrieval             100.0  (high)
+  tool_discipline       100.0  (high)
+  context               100.0  (high)
+```
+
+### Bad Run
+
+```
+trace-eval run examples/hermes_bad.jsonl
 ============================================================
   TRACE-EVAL SCORECARD  Total: 32.4/100
 ============================================================
@@ -46,7 +106,28 @@ FRICTION FLAGS (sorted by severity):
     -> Review 3 error(s) at event indices [3, 4, 8]
   [MEDIUM] context_compression
     -> Context compression triggered 1 time(s)
-  ...
+```
+
+### Compare
+
+```
+trace-eval compare examples/before.jsonl examples/after.jsonl
+COMPARISON: before vs after
+=======================================================
+  Total score:   67.5 ->   99.3
+  Change:      +31.9 (improved)
+
+  reliability            45.0 ->  100.0  ^ +55.0
+  efficiency             93.5 ->   96.8  ^ +3.2
+  retrieval              50.0 ->  100.0  ^ +50.0
+  tool_discipline        90.0 ->  100.0  ^ +10.0
+  context                95.0 ->  100.0  ^ +5.0
+
+  FLAG CHANGES:
+    [RESOLVED] reliability_errors
+    [RESOLVED] reliability_terminal_partial
+    [RESOLVED] retrieval_no_entrypoint
+    [RESOLVED] tool_retries
 ```
 
 ## Quick Start
@@ -94,9 +175,11 @@ Weights are configurable. Unscorable dimensions redistribute proportionally.
 
 Adding your own adapter? The adapter interface is simple: implement `load(path) -> Trace` and `capability_report(trace) -> dict`.
 
-## JSON Output for Agents
+## Agent Integration (`--format json`)
 
-The `--format json` flag produces stable, structured output designed for agent consumption:
+The `--format json` flag produces stable, machine-readable output designed for agent consumption. An AI agent that just completed a task can pipe its trace through trace-eval and use the results to self-diagnose and guide remediation.
+
+### How an agent uses it
 
 ```json
 {
@@ -107,13 +190,6 @@ The `--format json` flag produces stable, structured output designed for agent c
     "retrieval": 0.0,
     "tool_discipline": 80.0,
     "context": 32.0
-  },
-  "dimension_confidence": {
-    "reliability": "high",
-    "efficiency": "medium",
-    "retrieval": "high",
-    "tool_discipline": "high",
-    "context": "high"
   },
   "friction_flags": [
     {
@@ -130,8 +206,7 @@ The `--format json` flag produces stable, structured output designed for agent c
   ],
   "suggestions": [
     "Use canonical retrieval entrypoint",
-    "Stop accessing deprecated files",
-    "Avoid fallback search -- use primary retrieval"
+    "Stop accessing deprecated files"
   ],
   "scorable_dimensions": ["reliability", "efficiency", "retrieval", "tool_discipline", "context"],
   "unscorable_dimensions": [],
@@ -141,7 +216,15 @@ The `--format json` flag produces stable, structured output designed for agent c
 }
 ```
 
-Fields like `likely_causes` and `suggestions` are derived from friction flags and designed for direct use by agent remediation logic.
+### Agent remediation pattern
+
+1. Run `trace-eval run trace.jsonl --format json`
+2. Parse `likely_causes` — these are the root-cause hypotheses
+3. Parse `suggestions` — each one maps to a concrete fix
+4. Apply fixes, re-run the agent, compare the new trace
+5. Use `trace-eval compare old.jsonl new.jsonl --format json` to quantify improvement
+
+Fields are stable and typed. `suggestions` is a plain string array designed for direct use in agent prompts or remediation logic.
 
 ## What's Coming
 

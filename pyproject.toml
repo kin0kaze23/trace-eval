@@ -6,6 +6,24 @@ readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.11"
 dependencies = []
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Testing",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Environment :: Console",
+]
+
+[project.urls]
+Homepage = "https://github.com/kin0kaze23/trace-eval"
+Source = "https://github.com/kin0kaze23/trace-eval"
+
+[project.scripts]
+trace-eval = "trace_eval.cli:main"
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]

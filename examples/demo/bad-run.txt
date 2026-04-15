@@ -1,0 +1,42 @@
+$ trace-eval run examples/hermes_bad.jsonl
+
+============================================================
+  TRACE-EVAL SCORECARD  Total: 32.4/100
+============================================================
+
+LIKELY ROOT CAUSES:
+  - Use canonical retrieval entrypoint
+  - Stop accessing deprecated files
+  - Context pressure exceeded 90% — reduce prompt size
+
+DIMENSION SCORES:
+  reliability             5.0  (high)
+  efficiency             77.4  (medium)
+  retrieval               0.0  (high)
+  tool_discipline        80.0  (high)
+  context                32.0  (high)
+
+FRICTION FLAGS (sorted by severity):
+  [CRITICAL] retrieval_no_entrypoint
+    -> Use canonical retrieval entrypoint
+  [CRITICAL] retrieval_deprecated_file @event 9
+    -> Stop accessing deprecated files
+  [CRITICAL] context_pressure_critical
+    -> Context pressure exceeded 90% — reduce prompt size
+  [HIGH] retrieval_fallback_search
+    -> Avoid fallback search -- use primary retrieval
+  [HIGH] tool_timeout @event 5
+    -> 1 tool call(s) timed out
+  [MEDIUM] reliability_errors @event 3
+    -> Review 3 error(s) at event indices [3, 4, 8]
+  [MEDIUM] context_compression
+    -> Context compression triggered 1 time(s)
+
+ADAPTER CAPABILITY REPORT:
+  has_span_ids: False
+  has_parent_spans: False
+  has_event_latency: True
+  has_token_data: True
+  has_tool_calls: True
+  has_cost_data: True
+  has_retrieval_fields: True
