@@ -137,7 +137,7 @@ def _make_action(action_type: str, triggered_by: str) -> RemediationAction:
 
 
 def format_remediation(actions: list[RemediationAction], card: Scorecard) -> str:
-    """Format remediation actions for display."""
+    """Format remediation actions for display with top-3 prioritization."""
     if not actions:
         return "No recommended actions. Score looks good."
 
@@ -148,17 +148,41 @@ def format_remediation(actions: list[RemediationAction], card: Scorecard) -> str
         "",
     ]
 
-    for i, action in enumerate(actions, 1):
-        approval_note = ""
-        if action.safe_to_automate and not action.requires_approval:
-            approval_note = " [AUTO-SAFE]"
-        elif action.requires_approval:
-            approval_note = " [REQUIRES APPROVAL]"
-        lines.append(f"  {i}. {action.label}{approval_note}")
+    # Top 3 actions prominently
+    top_3 = actions[:3]
+    lines.append("  TOP 3 ACTIONS:")
+    for i, action in enumerate(top_3, 1):
+        approval_tag = "[AUTO-SAFE]" if (action.safe_to_automate and not action.requires_approval) else "[REQUIRES APPROVAL]"
+        lines.append(f"  {i}. {approval_tag} {action.label}")
         lines.append(f"     {action.description}")
         lines.append(f"     Confidence: {action.confidence}")
         lines.append("")
 
+    # Remaining actions beyond top 3
+    remaining = actions[3:]
+    if remaining:
+        lines.append("  Additional actions:")
+        for i, action in enumerate(remaining, 4):
+            approval_tag = "[AUTO-SAFE]" if (action.safe_to_automate and not action.requires_approval) else "[REQUIRES APPROVAL]"
+            lines.append(f"  {i}. {approval_tag} {action.label}")
+            lines.append(f"     {action.description}")
+            lines.append("")
+
     lines.append("To auto-apply safe fixes: trace-eval remediate trace.jsonl --apply-safe")
     lines.append("To generate full report: trace-eval remediate trace.jsonl --report")
+    return "\n".join(lines)
+
+
+def format_next_steps(actions: list[RemediationAction], card: Scorecard) -> str:
+    """Compact top-3 next-actions for inline display after scorecard."""
+    if not actions:
+        return "\nNo recommended actions. Score looks good."
+
+    lines = [
+        "",
+        "Next steps:",
+    ]
+    for i, action in enumerate(actions[:3], 1):
+        approval_tag = "[AUTO-SAFE]" if (action.safe_to_automate and not action.requires_approval) else "[REQUIRES APPROVAL]"
+        lines.append(f"  {i}. {approval_tag} {action.label}")
     return "\n".join(lines)
