@@ -1,0 +1,65 @@
+# trace-eval GitHub Actions Example
+#
+# Copy this file to your repo at .github/workflows/agent-quality.yml
+# to gate your AI agent runs with trace-eval.
+#
+# This workflow:
+# 1. Installs trace-eval from PyPI
+# 2. Converts your agent's native trace to canonical format
+# 3. Scores the trace and fails the build if below threshold
+#
+# Adjust the trace paths and threshold to match your needs.
+
+name: Agent Quality Gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install trace-eval
+        run: pip install trace-eval
+
+      # Step 1: Convert your agent's native trace to canonical format
+      # trace-eval auto-detects Claude Code, OpenClaw, and Cursor formats
+      - name: Convert agent trace
+        run: |
+          trace-eval convert agent-trace.jsonl -o trace.jsonl
+
+      # Step 2: Run the scorecard
+      - name: Score agent trace
+        run: |
+          trace-eval run trace.jsonl --summary
+          trace-eval run trace.jsonl --format json > trace-report.json
+
+      # Step 3: Gate the build — fails if score is below threshold
+      # Use --profile coding_agent for coding agents, rag_agent for RAG agents
+      # Adjust --min-score to your quality bar
+      - name: Quality gate
+        run: |
+          trace-eval ci trace.jsonl \
+            --min-score 70 \
+            --profile coding_agent \
+            --format json
+
+      # Optional: Upload the JSON report as an artifact
+      - name: Upload trace report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trace-eval-report
+          path: trace-report.json
