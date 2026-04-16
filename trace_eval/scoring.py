@@ -6,6 +6,9 @@ from dataclasses import dataclass, field
 
 from trace_eval.schema import FrictionFlag, JudgeResult
 
+# Lazy import to avoid circular dependency:
+# from trace_eval.report import compute_rating
+
 
 DEFAULT_PROFILE = {
     "reliability": 0.35,
@@ -47,6 +50,7 @@ class Scorecard:
     unscorable_dimensions: list[str]
     missing_required_judges: list[str]
     profile: str
+    rating: str  # "Excellent", "Good", "Needs Work", "Critical"
 
 
 def compute_scorecard(
@@ -88,8 +92,19 @@ def compute_scorecard(
     # Check missing required judges
     missing_required = [n for n in REQUIRED_JUDGES if n in unscorable]
 
+    # Compute rating
+    rounded_score = round(total_score, 2)
+    if rounded_score >= 90:
+        rating = "Excellent"
+    elif rounded_score >= 70:
+        rating = "Good"
+    elif rounded_score >= 40:
+        rating = "Needs Work"
+    else:
+        rating = "Critical"
+
     return Scorecard(
-        total_score=round(total_score, 2),
+        total_score=rounded_score,
         dimension_scores=dimension_scores,
         dimension_confidence=dimension_confidence,
         all_flags=all_flags,
@@ -97,4 +112,5 @@ def compute_scorecard(
         unscorable_dimensions=unscorable,
         missing_required_judges=missing_required,
         profile=profile_name,
+        rating=rating,
     )

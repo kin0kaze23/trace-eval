@@ -343,6 +343,17 @@ def cmd_convert(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_locate(args: argparse.Namespace) -> int:
+    from trace_eval.locate import locate, format_locate
+    locations = locate(
+        agent_type=getattr(args, "agent_type", "all"),
+        limit=getattr(args, "limit", 20),
+        hours=getattr(args, "hours", 48),
+    )
+    print(format_locate(locations))
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="trace-eval",
@@ -389,6 +400,16 @@ def main():
                            help="Trace format (auto-detected if omitted)")
     p_convert.add_argument("-o", "--output", help="Output path (default: <input>_canonical.jsonl)")
 
+    # locate
+    p_locate = sub.add_parser("locate", help="Find recent agent trace files")
+    p_locate.add_argument("agent_type", nargs="?", default="all",
+                          choices=["claude-code", "cursor", "openclaw", "all"],
+                          help="Agent type to search for (default: all)")
+    p_locate.add_argument("--limit", type=int, default=20,
+                          help="Maximum results (default: 20)")
+    p_locate.add_argument("--hours", type=int, default=48,
+                          help="Search window in hours (default: 48)")
+
     args = parser.parse_args()
 
     commands = {
@@ -397,6 +418,7 @@ def main():
         "compare": cmd_compare,
         "ci": cmd_ci,
         "convert": cmd_convert,
+        "locate": cmd_locate,
     }
 
     sys.exit(commands[args.command](args))

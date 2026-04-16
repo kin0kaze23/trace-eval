@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict
+from enum import Enum
 from typing import Any
 
 from trace_eval.scoring import Scorecard
@@ -12,11 +13,30 @@ from trace_eval.schema import FrictionFlag
 SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3}
 
 
+class ScoreRating(Enum):
+    EXCELLENT = "Excellent"
+    GOOD = "Good"
+    NEEDS_WORK = "Needs Work"
+    CRITICAL = "Critical"
+
+
+def compute_rating(score: float) -> ScoreRating:
+    """Map a 0-100 score to a human-readable rating."""
+    if score >= 90:
+        return ScoreRating.EXCELLENT
+    elif score >= 70:
+        return ScoreRating.GOOD
+    elif score >= 40:
+        return ScoreRating.NEEDS_WORK
+    else:
+        return ScoreRating.CRITICAL
+
+
 def format_text(card: Scorecard, adapter_report: dict[str, Any] | None = None) -> str:
     lines: list[str] = []
     profile_note = f"  Profile: {card.profile}" if card.profile != "default" else ""
     lines.append("=" * 60)
-    lines.append(f"  TRACE-EVAL SCORECARD  Total: {card.total_score:.1f}/100")
+    lines.append(f"  TRACE-EVAL SCORECARD  Total: {card.total_score:.1f}/100  [{card.rating}]")
     if profile_note:
         lines.append(profile_note)
     lines.append("=" * 60)
@@ -124,7 +144,7 @@ def format_summary(card: Scorecard) -> str:
     lines: list[str] = []
 
     # Line 1: Score
-    lines.append(f"Score: {card.total_score:.1f}/100")
+    lines.append(f"Score: {card.total_score:.1f}/100  [{card.rating}]")
 
     # Line 2: Top 3 flags by severity
     sorted_flags = sorted(

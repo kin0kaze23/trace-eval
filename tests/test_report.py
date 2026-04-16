@@ -1,6 +1,6 @@
 import json
 import pytest
-from trace_eval.report import format_text, format_json, format_summary
+from trace_eval.report import format_text, format_json, format_summary, compute_rating, ScoreRating
 from trace_eval.scoring import Scorecard
 from trace_eval.schema import FrictionFlag
 
@@ -30,6 +30,7 @@ def _make_card():
         unscorable_dimensions=[],
         missing_required_judges=[],
         profile="default",
+        rating="Good",
     )
 
 
@@ -37,6 +38,7 @@ def test_text_format_has_score():
     card = _make_card()
     text = format_text(card)
     assert "72.5" in text
+    assert "[Good]" in text
     assert "reliability" in text.lower()
 
 
@@ -107,6 +109,7 @@ def _make_bad_card():
         unscorable_dimensions=["retrieval", "context"],
         missing_required_judges=[],
         profile="default",
+        rating="Critical",
     )
 
 
@@ -130,6 +133,7 @@ def _make_good_card():
         unscorable_dimensions=[],
         missing_required_judges=[],
         profile="default",
+        rating="Excellent",
     )
 
 
@@ -167,3 +171,14 @@ def test_summary_good_run():
     text = format_summary(card)
     assert "98.9" in text
     assert "looks good" in text.lower()
+
+
+def test_rating_thresholds():
+    assert compute_rating(95) == ScoreRating.EXCELLENT
+    assert compute_rating(90) == ScoreRating.EXCELLENT
+    assert compute_rating(89) == ScoreRating.GOOD
+    assert compute_rating(70) == ScoreRating.GOOD
+    assert compute_rating(69) == ScoreRating.NEEDS_WORK
+    assert compute_rating(40) == ScoreRating.NEEDS_WORK
+    assert compute_rating(39) == ScoreRating.CRITICAL
+    assert compute_rating(0) == ScoreRating.CRITICAL
