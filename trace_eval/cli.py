@@ -100,6 +100,11 @@ def cmd_run(args: argparse.Namespace) -> int:
     else:
         print(format_text(card, adapter_report=adapter_report))
 
+    if getattr(args, "next_steps", False):
+        from trace_eval.remediation import analyze, format_remediation
+        actions = analyze(card)
+        print("\n" + format_remediation(actions, card))
+
     return 0
 
 
@@ -343,6 +348,40 @@ def cmd_convert(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_remediate(args: argparse.Namespace) -> int:
+    path = Path(args.trace)
+    if not path.exists():
+        print(f"Error: file not found: {path}", file=sys.stderr)
+        return 1
+
+    trace, adapter_report = load_trace_with_report(path)
+    profile = getattr(args, "profile", None)
+    judge_results = {name: fn(trace.events) for name, fn in JUDGES.items()}
+    card = compute_scorecard(judge_results, profile=profile)
+
+    from trace_eval.remediation import analyze, format_remediation
+    actions = analyze(card)
+    print(format_remediation(actions, card))
+
+    # If --apply-safe flag, also generate safe fixes
+    if getattr(args, "apply_safe", False):
+        from trace_eval.autofix import apply_safe_fixes
+        fixes = apply_safe_fixes(actions, card, path)
+        print("\n" + "=" * 60)
+        print("  SAFE FIXES APPLIED")
+        print("=" * 60)
+        for fix in fixes:
+            print(f"  [+] {fix['label']}: {fix['path']}")
+
+    # If --report flag, generate markdown report
+    if getattr(args, "report", False):
+        from trace_eval.autofix import generate_remediation_report
+        report_path = generate_remediation_report(actions, card, path)
+        print(f"\n  Report saved: {report_path}")
+
+    return 0
+
+
 def cmd_locate(args: argparse.Namespace) -> int:
     from trace_eval.locate import locate, format_locate
     locations = locate(
@@ -373,6 +412,8 @@ def main():
                        help="Scoring profile (default: auto-detect from trace)")
     p_run.add_argument("--summary", action="store_true",
                        help="Concise output: score, top flags, diagnosis (for humans + agents)")
+    p_run.add_argument("--next-steps", action="store_true",
+                       help="Show remediation recommendations after scorecard")
 
     # compare
     p_compare = sub.add_parser("compare", help="Delta between two traces")
@@ -410,6 +451,16 @@ def main():
     p_locate.add_argument("--hours", type=int, default=48,
                           help="Search window in hours (default: 48)")
 
+    # remediate
+    p_remediate = sub.add_parser("remediate", help="Get recommended actions to improve agent run quality")
+    p_remediate.add_argument("trace", help="Path to trace file")
+    p_remediate.add_argument("--profile", choices=list(PROFILES.keys()), default=None,
+                             help="Scoring profile")
+    p_remediate.add_argument("--apply-safe", action="store_true",
+                             help="Apply safe fixes automatically")
+    p_remediate.add_argument("--report", action="store_true",
+                             help="Generate full markdown remediation report")
+
     args = parser.parse_args()
 
     commands = {
@@ -419,6 +470,7 @@ def main():
         "ci": cmd_ci,
         "convert": cmd_convert,
         "locate": cmd_locate,
+        "remediate": cmd_remediate,
     }
 
     sys.exit(commands[args.command](args))
