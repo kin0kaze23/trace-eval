@@ -96,7 +96,9 @@ def cmd_run(args: argparse.Namespace) -> int:
     if getattr(args, "summary", False):
         print(format_summary(card))
     elif args.format == "json":
-        print(format_json(card, adapter_report=adapter_report))
+        from trace_eval.remediation import analyze
+        actions = analyze(card)
+        print(format_json(card, adapter_report=adapter_report, actions=actions))
     else:
         print(format_text(card, adapter_report=adapter_report))
 

@@ -182,3 +182,41 @@ def test_rating_thresholds():
     assert compute_rating(40) == ScoreRating.NEEDS_WORK
     assert compute_rating(39) == ScoreRating.CRITICAL
     assert compute_rating(0) == ScoreRating.CRITICAL
+
+
+def test_json_has_rating():
+    """JSON output must include a rating field."""
+    card = _make_card()
+    data = json.loads(format_json(card))
+    assert data["rating"] == "Good"
+
+
+def test_json_has_top_issues():
+    """JSON output must include top_issues — up to 3 friction flags sorted by severity."""
+    card = _make_card()
+    data = json.loads(format_json(card))
+    assert "top_issues" in data
+    assert isinstance(data["top_issues"], list)
+    assert len(data["top_issues"]) <= 3
+    for issue in data["top_issues"]:
+        assert "id" in issue
+        assert "severity" in issue
+        assert "summary" in issue
+
+
+def test_json_has_top_actions():
+    """JSON output must include top_actions — up to 3 actions sorted deterministically."""
+    card = _make_card()
+    from trace_eval.remediation import analyze
+    actions = analyze(card)
+    data = json.loads(format_json(card, actions=actions))
+    assert "top_actions" in data
+    assert isinstance(data["top_actions"], list)
+    assert len(data["top_actions"]) <= 3
+    for action in data["top_actions"]:
+        assert "action_type" in action
+        assert "label" in action
+        assert "description" in action
+        assert "confidence" in action
+        assert "safe_to_automate" in action
+        assert "requires_approval" in action

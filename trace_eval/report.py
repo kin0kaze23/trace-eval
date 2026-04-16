@@ -94,6 +94,7 @@ def format_json(
     card: Scorecard,
     adapter_report: dict[str, Any] | None = None,
     failed_thresholds: list[dict] | None = None,
+    actions: list[Any] | None = None,
 ) -> str:
     # Build likely_causes and suggestions from flags
     likely_causes: list[str] = []
@@ -118,6 +119,38 @@ def format_json(
                 "confidence": card.dimension_confidence.get(dim, "high"),
             }
 
+    # Build top_issues: top 3 friction flags sorted by severity
+    sorted_flags = sorted(card.all_flags, key=lambda f: SEVERITY_ORDER.get(f.severity, 99))
+    top_issues = [
+        {"id": f.id, "severity": f.severity, "summary": f.suggestion}
+        for f in sorted_flags[:3]
+    ]
+
+    # Build top_actions: AUTO-SAFE first, then by confidence, then action_type alphabetically
+    if actions:
+        confidence_rank = {"high": 0, "medium": 1, "low": 2}
+        sorted_actions = sorted(
+            actions,
+            key=lambda a: (
+                not (a.safe_to_automate and not a.requires_approval),
+                confidence_rank.get(a.confidence, 9),
+                a.action_type,
+            ),
+        )
+        top_actions = [
+            {
+                "action_type": a.action_type,
+                "label": a.label,
+                "description": a.description,
+                "confidence": a.confidence,
+                "safe_to_automate": a.safe_to_automate,
+                "requires_approval": a.requires_approval,
+            }
+            for a in sorted_actions[:3]
+        ]
+    else:
+        top_actions = []
+
     output: dict[str, Any] = {
         "total_score": card.total_score,
         "dimension_scores": card.dimension_scores,
@@ -130,6 +163,9 @@ def format_json(
         "judge_coverage": judge_coverage,
         "adapter_capability_report": adapter_report or {},
         "failed_thresholds": failed_thresholds or [],
+        "rating": card.rating,
+        "top_issues": top_issues,
+        "top_actions": top_actions,
     }
 
     return json.dumps(output, indent=2)
