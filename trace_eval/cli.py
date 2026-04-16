@@ -8,13 +8,14 @@ import sys
 from pathlib import Path
 
 from trace_eval.loader import load_trace_with_report
-from trace_eval.scoring import compute_scorecard, DEFAULT_PROFILE, REQUIRED_JUDGES
-from trace_eval.report import format_text, format_json
+from trace_eval.scoring import compute_scorecard, DEFAULT_PROFILE, REQUIRED_JUDGES, PROFILES
+from trace_eval.report import format_text, format_json, format_summary
 from trace_eval.judges.reliability import judge_reliability
 from trace_eval.judges.efficiency import judge_efficiency
 from trace_eval.judges.retrieval import judge_retrieval
 from trace_eval.judges.tool_discipline import judge_tool_discipline
 from trace_eval.judges.context import judge_context
+from trace_eval.convert import convert, _detect_format, CONVERTERS
 
 JUDGES = {
     "reliability": judge_reliability,
@@ -88,10 +89,13 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     trace, adapter_report = load_trace_with_report(path)
 
+    profile = getattr(args, "profile", None)
     judge_results = {name: fn(trace.events) for name, fn in JUDGES.items()}
-    card = compute_scorecard(judge_results)
+    card = compute_scorecard(judge_results, profile=profile)
 
-    if args.format == "json":
+    if getattr(args, "summary", False):
+        print(format_summary(card))
+    elif args.format == "json":
         print(format_json(card, adapter_report=adapter_report))
     else:
         print(format_text(card, adapter_report=adapter_report))
@@ -118,6 +122,21 @@ def cmd_compare(args: argparse.Namespace) -> int:
 
     before_card = compute_scorecard(before_results)
     after_card = compute_scorecard(after_results)
+
+    if getattr(args, "summary", False):
+        delta = after_card.total_score - before_card.total_score
+        print(f"Before: {before_card.total_score:.1f}/100")
+        print(f"After:  {after_card.total_score:.1f}/100")
+        print(f"Delta:  {'+' if delta > 0 else ''}{delta:.1f}")
+        before_flag_ids = {f.id for f in before_card.all_flags}
+        after_flag_ids = {f.id for f in after_card.all_flags}
+        resolved = before_flag_ids - after_flag_ids
+        new_flags = after_flag_ids - before_flag_ids
+        if resolved:
+            print(f"Resolved: {len(resolved)} flags")
+        if new_flags:
+            print(f"New: {len(new_flags)} flags")
+        return 0
 
     # --- Text comparison (default) ---
     if args.format != "json":
@@ -217,10 +236,11 @@ def cmd_ci(args: argparse.Namespace) -> int:
     min_score = args.min_score
     allow_partial = args.allow_partial
     use_json = args.format == "json"
+    profile = getattr(args, "profile", None)
 
     trace, adapter_report = load_trace_with_report(path)
     judge_results = {name: fn(trace.events) for name, fn in JUDGES.items()}
-    card = compute_scorecard(judge_results)
+    card = compute_scorecard(judge_results, profile=profile)
 
     # Collect structured failure reasons
     failed_thresholds: list[dict] = []
@@ -272,6 +292,57 @@ def cmd_ci(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_convert(args: argparse.Namespace) -> int:
+    input_path = Path(args.input)
+    if not input_path.exists():
+        print(f"Error: file not found: {input_path}", file=sys.stderr)
+        return 1
+
+    fmt = getattr(args, "format_type", None)
+    output_path = getattr(args, "output", None)
+
+    # Auto-detect format if not specified
+    detected_fmt = _detect_format(input_path)
+    if fmt is None:
+        fmt = detected_fmt
+
+    if fmt == "unknown":
+        print(f"Error: could not detect trace format for {input_path}", file=sys.stderr)
+        print(f"Supported formats: {', '.join(CONVERTERS.keys())}", file=sys.stderr)
+        print(f"Or specify format explicitly: trace-eval convert <format> {input_path}", file=sys.stderr)
+        return 1
+
+    if fmt == "canonical":
+        print(f"File is already in canonical format: {input_path}", file=sys.stderr)
+        return 0
+
+    try:
+        events = convert(input_path, fmt)
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+    # Write output
+    if output_path:
+        out = Path(output_path)
+    else:
+        out = input_path.with_name(input_path.stem + "_canonical.jsonl")
+
+    with open(out, "w") as f:
+        for ev in events:
+            f.write(json.dumps(ev) + "\n")
+
+    # Print summary to stderr
+    error_count = sum(1 for e in events if e.get("status") == "error")
+    tool_count = sum(1 for e in events if e.get("tool_name"))
+    print(f"Converted {len(events)} events from {fmt} format -> {out}", file=sys.stderr)
+    if error_count > 0:
+        print(f"  {error_count} tool errors detected", file=sys.stderr)
+    print(f"  {tool_count} tool-involved events", file=sys.stderr)
+
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="trace-eval",
@@ -287,12 +358,18 @@ def main():
     p_run = sub.add_parser("run", help="Full scorecard")
     p_run.add_argument("trace", help="Path to trace file")
     p_run.add_argument("--format", choices=["text", "json"], default="text", help="Output format (default: text)")
+    p_run.add_argument("--profile", choices=list(PROFILES.keys()), default=None,
+                       help="Scoring profile (default: auto-detect from trace)")
+    p_run.add_argument("--summary", action="store_true",
+                       help="Concise output: score, top flags, diagnosis (for humans + agents)")
 
     # compare
     p_compare = sub.add_parser("compare", help="Delta between two traces")
     p_compare.add_argument("before", help="Path to before trace")
     p_compare.add_argument("after", help="Path to after trace")
     p_compare.add_argument("--format", choices=["text", "json"], default="text", help="Output format (default: text)")
+    p_compare.add_argument("--summary", action="store_true",
+                           help="Concise before/after comparison")
 
     # ci
     p_ci = sub.add_parser("ci", help="CI gate -- exits non-zero below threshold")
@@ -301,6 +378,16 @@ def main():
     p_ci.add_argument("--min-dimension", action="append", help="Per-dimension threshold (e.g., reliability=90)")
     p_ci.add_argument("--allow-partial", action="store_true", help="Allow unscorable judges")
     p_ci.add_argument("--format", choices=["text", "json"], default="text", help="Output format (default: text)")
+    p_ci.add_argument("--profile", choices=list(PROFILES.keys()), default=None,
+                      help="Scoring profile (default: auto-detect from trace)")
+
+    # convert
+    p_convert = sub.add_parser("convert", help="Convert non-canonical traces to canonical JSONL")
+    p_convert.add_argument("input", help="Path to trace file to convert")
+    p_convert.add_argument("format_type", nargs="?", default=None,
+                           choices=["claude-code", "openclaw", "cursor"],
+                           help="Trace format (auto-detected if omitted)")
+    p_convert.add_argument("-o", "--output", help="Output path (default: <input>_canonical.jsonl)")
 
     args = parser.parse_args()
 
@@ -309,6 +396,7 @@ def main():
         "run": cmd_run,
         "compare": cmd_compare,
         "ci": cmd_ci,
+        "convert": cmd_convert,
     }
 
     sys.exit(commands[args.command](args))

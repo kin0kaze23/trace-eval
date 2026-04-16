@@ -48,6 +48,7 @@ def test_unscorable_optional_redistributes():
 
 
 def test_unscorable_required_still_fails():
+    """Reliability and tool_discipline are required — retrieval is optional."""
     judges = {
         "reliability": _make_result(80),
         "efficiency": _make_result(90),
@@ -60,7 +61,22 @@ def test_unscorable_required_still_fails():
     }
     card = compute_scorecard(judges)
     assert "retrieval" in card.unscorable_dimensions
-    assert "retrieval" in card.missing_required_judges
+    # Retrieval is no longer required — weight redistributes
+    assert "retrieval" not in card.missing_required_judges
+
+    # If reliability is unscorable (required), it should show up
+    judges2 = {
+        "reliability": JudgeResult(
+            score=None, confidence="low", friction_flags=[],
+            explanation="", raw_metrics={}, scorable=False,
+        ),
+        "efficiency": _make_result(90),
+        "retrieval": _make_result(70),
+        "tool_discipline": _make_result(85),
+        "context": _make_result(75),
+    }
+    card2 = compute_scorecard(judges2)
+    assert "reliability" in card2.missing_required_judges
 
 
 def test_friction_flags_collected():

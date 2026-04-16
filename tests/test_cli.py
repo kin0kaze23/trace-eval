@@ -89,3 +89,19 @@ def test_compare_json(tmp_path):
     assert "before" in data
     assert "after" in data
     assert "delta" in data
+
+
+def test_run_summary(tmp_path):
+    trace = _make_trace(tmp_path, "good", GOOD_LINES)
+    result = _run(["run", str(trace), "--summary"])
+    assert "Score:" in result.stdout
+    assert "/100" in result.stdout
+
+
+def test_compare_summary(tmp_path):
+    before = _make_trace(tmp_path, "before", BAD_LINES)
+    after = _make_trace(tmp_path, "after", GOOD_LINES)
+    result = _run(["compare", str(before), str(after), "--summary"])
+    assert "Before:" in result.stdout
+    assert "After:" in result.stdout
+    assert "Delta:" in result.stdout

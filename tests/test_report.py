@@ -1,6 +1,6 @@
 import json
 import pytest
-from trace_eval.report import format_text, format_json
+from trace_eval.report import format_text, format_json, format_summary
 from trace_eval.scoring import Scorecard
 from trace_eval.schema import FrictionFlag
 
@@ -29,6 +29,7 @@ def _make_card():
         scorable_dimensions=["reliability", "efficiency", "retrieval", "tool_discipline", "context"],
         unscorable_dimensions=[],
         missing_required_judges=[],
+        profile="default",
     )
 
 
@@ -68,3 +69,101 @@ def test_json_has_required_fields():
     assert "judge_coverage" in data
     assert "adapter_capability_report" in data
     assert "failed_thresholds" in data
+
+
+def _make_bad_card():
+    """Scorecard with low scores for testing summary output."""
+    return Scorecard(
+        total_score=28.3,
+        dimension_scores={
+            "reliability": 0.0,
+            "efficiency": 30.0,
+            "retrieval": None,
+            "tool_discipline": 92.0,
+            "context": None,
+        },
+        dimension_confidence={
+            "reliability": "high", "efficiency": "high",
+            "retrieval": "low", "tool_discipline": "high", "context": "low",
+        },
+        all_flags=[
+            FrictionFlag(
+                id="reliability_errors", severity="medium",
+                dimension="reliability", event_index=None,
+                suggestion="Review 90 error(s)",
+            ),
+            FrictionFlag(
+                id="efficiency_high_tokens", severity="medium",
+                dimension="efficiency", event_index=None,
+                suggestion="High token usage detected",
+            ),
+            FrictionFlag(
+                id="tool_redundant", severity="low",
+                dimension="tool_discipline", event_index=3,
+                suggestion="1 redundant tool call",
+            ),
+        ],
+        scorable_dimensions=["reliability", "efficiency", "tool_discipline"],
+        unscorable_dimensions=["retrieval", "context"],
+        missing_required_judges=[],
+        profile="default",
+    )
+
+
+def _make_good_card():
+    """Scorecard with high scores for testing summary output."""
+    return Scorecard(
+        total_score=98.9,
+        dimension_scores={
+            "reliability": 100.0,
+            "efficiency": 94.5,
+            "retrieval": 100.0,
+            "tool_discipline": 100.0,
+            "context": 100.0,
+        },
+        dimension_confidence={
+            "reliability": "high", "efficiency": "medium",
+            "retrieval": "high", "tool_discipline": "high", "context": "high",
+        },
+        all_flags=[],
+        scorable_dimensions=["reliability", "efficiency", "retrieval", "tool_discipline", "context"],
+        unscorable_dimensions=[],
+        missing_required_judges=[],
+        profile="default",
+    )
+
+
+def test_summary_has_score():
+    card = _make_bad_card()
+    text = format_summary(card)
+    assert "28.3" in text
+    assert "/100" in text
+
+
+def test_summary_has_top_flags():
+    card = _make_bad_card()
+    text = format_summary(card)
+    assert "reliability_errors" in text
+
+
+def test_summary_has_diagnosis():
+    card = _make_bad_card()
+    text = format_summary(card)
+    assert "Diagnosis:" in text
+    assert "friction" in text.lower()
+
+
+def test_summary_is_concise():
+    """Summary should be under 10 lines — designed for quick scanning."""
+    card = _make_bad_card()
+    text = format_summary(card)
+    lines = [l for l in text.split("\n") if l.strip()]
+    assert len(lines) <= 10
+
+
+def test_summary_good_run():
+    """Good runs should have minimal output."""
+    card = _make_good_card()
+    text = format_summary(card)
+    assert "98.9" in text
+    assert "looks good" in text.lower()

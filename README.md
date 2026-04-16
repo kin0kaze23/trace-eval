@@ -13,68 +13,33 @@ Run `trace-eval` on an agent trace file and get:
 - **Actionable suggestions** — what to fix, not just that something broke
 - **Before/after comparison** — see if your changes actually improved things
 
-## See It in Action
+## Quick Start
 
 ```bash
-# 1. Install (uv or pip)
-uv sync --all-extras
+# 1. Install
+pip install trace-eval
 
-# 2. Validate a trace file
-trace-eval validate trace.jsonl
-# Schema validation PASSED — 8 events, field coverage bars printed
+# 2. Convert your agent trace (auto-detects: Claude Code, OpenClaw, Cursor)
+trace-eval convert ~/.claude/projects/.../session.jsonl -o trace.jsonl
 
-# 3. Run a scorecard
+# 3. Score it
 trace-eval run trace.jsonl
-# ============================================================
-#   TRACE-EVAL SCORECARD  Total: 32.4/100
-# ============================================================
-#
-# LIKELY ROOT CAUSES:
-#   - Use canonical retrieval entrypoint
-#   - Stop accessing deprecated files
-#   - Context pressure exceeded 90% — reduce prompt size
-#
-# DIMENSION SCORES:
-#   reliability             5.0  (high)
-#   efficiency             77.4  (medium)
-#   retrieval               0.0  (high)
-#   tool_discipline        80.0  (high)
-#   context                32.0  (high)
 
-# 4. Compare before vs after a fix
+# 4. Compare before/after a fix
 trace-eval compare before.jsonl after.jsonl
-# Total score: 67.5 -> 99.3  Change: +31.9 (improved)
-#
-# FLAG CHANGES:
-#   [RESOLVED] reliability_errors
-#   [RESOLVED] retrieval_no_entrypoint
-#   [RESOLVED] tool_retries
 
-# 5. CI gate — fails the build below a threshold
+# 5. Gate your CI
 trace-eval ci trace.jsonl --min-score 80
-# PASS (exit 0) or FAIL (exit 1)
 ```
 
-### Good Run
+For a complete walkthrough with real examples, see [examples/case_study.md](examples/case_study.md).
+
+## See It in Action
+
+### Bad Run → Diagnosis
 
 ```
-trace-eval run examples/hermes_good.jsonl
-============================================================
-  TRACE-EVAL SCORECARD  Total: 98.9/100
-============================================================
-
-DIMENSION SCORES:
-  reliability           100.0  (high)
-  efficiency             94.5  (medium)
-  retrieval             100.0  (high)
-  tool_discipline       100.0  (high)
-  context               100.0  (high)
-```
-
-### Bad Run
-
-```
-trace-eval run examples/hermes_bad.jsonl
+$ trace-eval run examples/hermes_bad.jsonl
 ============================================================
   TRACE-EVAL SCORECARD  Total: 32.4/100
 ============================================================
@@ -83,76 +48,40 @@ LIKELY ROOT CAUSES:
   - Use canonical retrieval entrypoint
   - Stop accessing deprecated files
   - Context pressure exceeded 90% — reduce prompt size
-
-DIMENSION SCORES:
-  reliability             5.0  (high)
-  efficiency             77.4  (medium)
-  retrieval               0.0  (high)
-  tool_discipline        80.0  (high)
-  context                32.0  (high)
-
-FRICTION FLAGS (sorted by severity):
-  [CRITICAL] retrieval_no_entrypoint
-    -> Use canonical retrieval entrypoint
-  [CRITICAL] retrieval_deprecated_file @event 9
-    -> Stop accessing deprecated files
-  [CRITICAL] context_pressure_critical
-    -> Context pressure exceeded 90% — reduce prompt size
-  [HIGH] retrieval_fallback_search
-    -> Avoid fallback search -- use primary retrieval
-  [HIGH] tool_timeout @event 5
-    -> 1 tool call(s) timed out
-  [MEDIUM] reliability_errors @event 3
-    -> Review 3 error(s) at event indices [3, 4, 8]
-  [MEDIUM] context_compression
-    -> Context compression triggered 1 time(s)
 ```
 
-### Compare
+### Quick Summary (`--summary`)
 
 ```
-trace-eval compare examples/before.jsonl examples/after.jsonl
+$ trace-eval run examples/hermes_bad.jsonl --summary
+Score: 32.4/100
+Flags: retrieval_no_entrypoint, retrieval_deprecated_file, context_pressure_critical
+Weak: reliability=5, retrieval=0, context=32
+Diagnosis: Agent run with significant friction.
+```
+
+### Compare Before vs After
+
+```
+$ trace-eval compare examples/hermes_bad.jsonl examples/hermes_good.jsonl
 COMPARISON: before vs after
 =======================================================
-  Total score:   67.5 ->   99.3
-  Change:      +31.9 (improved)
-
-  reliability            45.0 ->  100.0  ^ +55.0
-  efficiency             93.5 ->   96.8  ^ +3.2
-  retrieval              50.0 ->  100.0  ^ +50.0
-  tool_discipline        90.0 ->  100.0  ^ +10.0
-  context                95.0 ->  100.0  ^ +5.0
+  Total score:   32.4 ->   98.9
+  Change:      +66.5 (improved)
 
   FLAG CHANGES:
+    [RESOLVED] context_compression
+    [RESOLVED] context_pressure_critical
     [RESOLVED] reliability_errors
-    [RESOLVED] reliability_terminal_partial
-    [RESOLVED] retrieval_no_entrypoint
-    [RESOLVED] tool_retries
+    ...
 ```
 
-## Quick Start
+## Case Study
 
-```bash
-# Install
-pip install -e .
-# Or with uv:
-uv sync --all-extras
-
-# Validate a trace
-trace-eval validate examples/hermes_good.jsonl
-
-# Run a scorecard
-trace-eval run examples/hermes_good.jsonl
-
-# Machine-readable output (for agents)
-trace-eval run examples/hermes_bad.jsonl --format json
-
-# Compare before/after
-trace-eval compare examples/before.jsonl examples/after.jsonl
-
-# CI gate
-trace-eval ci examples/hermes_good.jsonl --min-score 80
-```
+See [examples/case_study.md](examples/case_study.md) for a complete walkthrough:
+- **Bad run → diagnosis → fix → before/after comparison** (synthetic traces)
+- **Real Claude Code session** (3,694 events, 90 errors diagnosed in under 1 second)
+- **Real OpenClaw session** (158 events, 11 errors with actionable flags)
 
 ## Scoring Dimensions
 
@@ -164,7 +93,95 @@ trace-eval ci examples/hermes_good.jsonl --min-score 80
 | Tool Discipline | 15% | Retries, redundant calls, timeouts |
 | Context | 10% | Context pressure, warnings, compression events |
 
-Weights are configurable. Unscorable dimensions redistribute proportionally.
+Weights are configurable via profiles. Unscorable dimensions redistribute proportionally.
+
+## Scoring Profiles
+
+| Profile | Reliability | Efficiency | Retrieval | Tool Discipline | Context |
+|---------|------------|------------|-----------|-----------------|---------|
+| **default** | 35% | 20% | 20% | 15% | 10% |
+| **coding_agent** | 40% | 25% | 0% | 25% | 10% |
+| **rag_agent** | 30% | 15% | 30% | 15% | 10% |
+
+```bash
+trace-eval run trace.jsonl --profile coding_agent
+```
+
+Unscorable dimensions (e.g., retrieval for coding agents) are automatically excluded and their weight redistributed to scorable dimensions.
+
+## Examples
+
+| Trace | Source | Events | Score | File |
+|-------|--------|--------|-------|------|
+| Good run (synthetic) | Modeled after Hermes | 8 | 98.9 | `examples/hermes_good.jsonl` |
+| Bad run (synthetic) | Modeled after Hermes | 11 | 32.4 | `examples/hermes_bad.jsonl` |
+| Real Claude Code | Stillness project | 3,694 | 28.3 | `examples/claude_code_real.jsonl` |
+| Real Claude Code #2 | AutomationHub project | 1,969 | 28.3 | `examples/claude_code_real_2.jsonl` |
+| OpenClaw | Real session | 158 | 42.6 | `examples/openclaw_before.jsonl` |
+| Cursor sample | Synthetic coding session | 18 | 59.8 | `examples/cursor_sample.jsonl` |
+
+## Convert Your Traces
+
+Don't have canonical JSONL? `trace-eval convert` handles native trace formats:
+
+```bash
+# Auto-detect format
+trace-eval convert ~/.claude/projects/.../session.jsonl -o trace.jsonl
+trace-eval convert ~/.openclaw/.../session.jsonl -o trace.jsonl
+trace-eval convert .cursor/.../transcript.jsonl -o trace.jsonl
+
+# Explicit format
+trace-eval convert cursor session.jsonl -o trace.jsonl
+
+# Then score
+trace-eval run trace.jsonl
+```
+
+| Format | Auto-detect | File Extension |
+|--------|------------|---------------|
+| Claude Code | Yes | `.jsonl` |
+| OpenClaw | Yes | `.jsonl` |
+| Cursor | Yes | `.jsonl` |
+| Canonical | Yes (passthrough) | `.jsonl` |
+| Hermes SQLite | N/A (load directly) | `.db` |
+
+## Agent Integration
+
+### Machine-readable output (`--format json`)
+
+```bash
+trace-eval run trace.jsonl --format json
+```
+
+Produces stable JSON output designed for agent self-diagnosis and remediation:
+
+```json
+{
+  "total_score": 32.43,
+  "dimension_scores": { "reliability": 5.0, "efficiency": 77.42, ... },
+  "friction_flags": [...],
+  "likely_causes": ["Use canonical retrieval entrypoint", ...],
+  "suggestions": ["Use canonical retrieval entrypoint", ...]
+}
+```
+
+**Agent remediation pattern:**
+1. Run `trace-eval run trace.jsonl --format json`
+2. Parse `likely_causes` — root-cause hypotheses
+3. Parse `suggestions` — each maps to a concrete fix
+4. Apply fixes, re-run the agent, compare the new trace
+
+### Quick summary (`--summary`)
+
+For concise output designed for both humans and agents:
+
+```
+$ trace-eval run trace.jsonl --summary
+Score: 28.3/100
+Flags: reliability_errors, efficiency_high_tokens, tool_redundant
+Weak: reliability=0, efficiency=30
+Diagnosis: Agent run with significant friction. fix errors (0/100 reliability). reduce token/tool usage.
+```
 
 ## Adapters
 
@@ -173,99 +190,13 @@ Weights are configurable. Unscorable dimensions redistribute proportionally.
 | JSONL (`.jsonl`) | Generic JSONL | Full — all fields available if present in file |
 | Hermes SQLite (`.db`) | Hermes | Honest/lossy — populates what exists, nulls what doesn't |
 
-Adding your own adapter? The adapter interface is simple: implement `load(path) -> Trace` and `capability_report(trace) -> dict`.
-
-## Agent Integration (`--format json`)
-
-The `--format json` flag produces stable, machine-readable output designed for agent consumption. An AI agent that just completed a task can pipe its trace through trace-eval and use the results to self-diagnose and guide remediation.
-
-### How an agent uses it
-
-```json
-{
-  "total_score": 32.43,
-  "dimension_scores": {
-    "reliability": 5.0,
-    "efficiency": 77.42,
-    "retrieval": 0.0,
-    "tool_discipline": 80.0,
-    "context": 32.0
-  },
-  "friction_flags": [
-    {
-      "id": "retrieval_no_entrypoint",
-      "severity": "critical",
-      "dimension": "retrieval",
-      "event_index": null,
-      "suggestion": "Use canonical retrieval entrypoint"
-    }
-  ],
-  "likely_causes": [
-    "Use canonical retrieval entrypoint",
-    "Stop accessing deprecated files"
-  ],
-  "suggestions": [
-    "Use canonical retrieval entrypoint",
-    "Stop accessing deprecated files"
-  ],
-  "scorable_dimensions": ["reliability", "efficiency", "retrieval", "tool_discipline", "context"],
-  "unscorable_dimensions": [],
-  "judge_coverage": { "...": "per-judge scorable + confidence" },
-  "adapter_capability_report": { "...": "field availability from adapter" },
-  "failed_thresholds": []
-}
-```
-
-### Agent remediation pattern
-
-1. Run `trace-eval run trace.jsonl --format json`
-2. Parse `likely_causes` — these are the root-cause hypotheses
-3. Parse `suggestions` — each one maps to a concrete fix
-4. Apply fixes, re-run the agent, compare the new trace
-5. Use `trace-eval compare old.jsonl new.jsonl --format json` to quantify improvement
-
-Fields are stable and typed. `suggestions` is a plain string array designed for direct use in agent prompts or remediation logic.
+Adding your own adapter? Implement `load(path) -> Trace` and `capability_report(trace) -> dict`.
 
 ## What's Coming
 
 - More adapters (OpenAI traces, LangSmith, LangGraph, custom formats)
-- Score profiles (balanced, reliability_first, cost_conscious)
 - Baseline comparison (cost vs similar tasks)
 - Parallelization analysis in Tool Discipline
-
-## Known Limitations
-
-### Hermes SQLite Adapter (lossy by design)
-
-The Hermes adapter maps the real Hermes DB schema (`sessions` + `messages` tables) to the canonical trace format. It is **honest and lossy** — it populates what exists and nulls what doesn't. It does **not** synthesize span IDs, fabricate relationships, or guess at missing data.
-
-**Fields the Hermes schema does not provide:**
-
-| Missing field | Impact on scoring |
-|--------------|-------------------|
-| `error_type` | Reliability judge counts errors but can't classify them |
-| `retrieval_entrypoint`, `retrieval_steps` | Retrieval judge always scores 50.0 (no entrypoint) |
-| `context_pressure_pct`, `context_tokens` | Context judge returns unscorable — weights redistributed |
-| `latency_ms` | Efficiency can't penalize slow tool calls |
-| `span_id`, `parent_span_id` | No trace-level deduplication or call tree analysis |
-| `cost_estimate` (Hermes stores in sessions, not events) | Efficiency cost sub-score unavailable |
-
-**What this means for Hermes users:**
-- Retrieval score will always be 50.0 (the no-entrypoint baseline) — this is correct behavior, not a bug
-- Context judge will show `N/A (low)` — the weight (10%) redistributes to other judges
-- Errors embedded in tool result content (e.g., `"error": "File not found"`) are not parsed by the adapter — you must add `status: "error"` to the JSONL if you want them scored
-
-### Generic JSONL Adapter
-
-- Requires the canonical field names (`event_type`, `status`, `tool_name`, etc.)
-- Fields not present are simply absent — no synthetic values
-- Does not parse proprietary trace formats (OpenAI, LangSmith) — use those formats' native tools to export to canonical JSONL first
-
-### Scoring
-
-- Scores are relative to the trace content, not to a baseline of "similar tasks"
-- Tool Discipline does not yet analyze parallel tool calls
-- Weight redistribution is proportional — some users may want custom profiles
 
 ## What This Is NOT
 

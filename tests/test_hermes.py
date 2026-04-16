@@ -207,9 +207,9 @@ def test_hermes_capability_report():
     assert report["has_span_ids"] is False
     assert report["has_parent_spans"] is False
     assert report["has_event_latency"] is False
-    assert report["has_token_data"] is True
+    assert report["has_token_data"] is False  # tokens at session level, not event level
     assert report["has_tool_calls"] is True
-    assert report["has_cost_data"] == "partial"
+    assert report["has_cost_data"] is False  # cost stored at session level only
     assert report["has_retrieval_fields"] is False
 
 

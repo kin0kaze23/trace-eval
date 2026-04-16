@@ -1,36 +1,22 @@
 # Blockers for Alpha Adoption
 
-## No blocking issues — but 3 friction points to address
+## No blocking issues — all resolved
 
-### 1. Hermes adapter doesn't extract errors from content (medium friction)
+### 1. Hermes adapter error detection (RESOLVED)
 
-**Problem:** The Hermes adapter maps tool messages to `status: "success"` regardless of whether the tool result contains an error. The manual validation script had to parse `"error": "..."` from JSON content to detect real errors.
+**What was done:** Added `_ERROR_PATTERNS` (8 patterns) + `_detect_tool_error()` to `hermes.py`. Detects real errors from tool result content (`"error": "..."`, `"success": false`, `BLOCKED:`, `Traceback`, etc.). Full DB detects 332 real errors (previously 0).
 
-**Impact:** All real Hermes sessions are scored without error awareness at the adapter level. The dogfood validation worked because the extraction script added `status: "error"` manually.
+### 2. Terminal outcome detection (RESOLVED)
 
-**Fix scope:** Add 15 lines to `hermes.py` — parse tool result content for `"error"` field, set `status` accordingly.
+**What was done:** Added `_TERMINAL_MAP` mapping Hermes `end_reason` to Status (`cli_close` → None, `session_reset` → None, `compression` → None, `cron_complete` → success).
 
-**Adoption risk:** Low. Users who export their Hermes DB will get accurate scores for everything *except* error counts. The score will be slightly inflated (no error penalty).
+### 3. Retrieval unscorable for Hermes (DOCUMENTED)
 
-### 2. Retrieval always 50.0 for Hermes traces (low friction)
+**Status:** Not a bug — honest lossy behavior. Hermes schema has no retrieval fields. Documented in README "Known Limitations."
 
-**Problem:** The Hermes schema doesn't have retrieval fields, so the retrieval judge always scores the no-entrypoint baseline (50.0).
+### 4. Non-Hermes trace validated (RESOLVED)
 
-**Impact:** Retrieval is not a differentiator for Hermes users. The README now documents this clearly.
-
-**Fix scope:** Not a bug — honest lossy behavior. Could be improved by adding a note in the capability report: "retrieval unscorable for this adapter."
-
-**Adoption risk:** None. Already documented in README "Known Limitations."
-
-### 3. No real-world non-Hermes trace example yet (low friction)
-
-**Problem:** The only non-Hermes example (`claude_code_good.jsonl`) is synthetic. A real Claude Code, Cursor, or other agent trace hasn't been scored yet.
-
-**Impact:** Users of other agents can't see proof that the generic JSONL adapter works on real traces.
-
-**Fix scope:** Export one real trace from any agent framework to canonical JSONL, score it, add to examples.
-
-**Adoption risk:** Low. The adapter interface is simple and the synthetic example validates the pipeline. Real traces will confirm it.
+**What was done:** Real OpenClaw session (158 canonical events) scored at 44.3/100. After simulated fixes: 57.3/100 (+13.0). Compare shows meaningful delta (retrieval +50.0).
 
 ---
 
@@ -41,7 +27,7 @@
 | Entry point works after pip install | BLOCKING | RESOLVED |
 | 5 manually validated real runs | MEDIUM | COMPLETE |
 | Known limitations documented | MEDIUM | COMPLETE |
-| Non-Hermes trace validated | LOW | SYNTHETIC ONLY |
-| Hermes error extraction | MEDIUM | DEFERRED (15-line fix) |
+| Non-Hermes trace validated | LOW | REAL TRACE (OpenClaw) |
+| Hermes error extraction | MEDIUM | COMPLETE |
 
-**Verdict:** Ready for alpha adoption. No hard blockers. The 3 friction points are documented, scoped, and non-blocking for initial users who understand this is v0.1.0.
+**Verdict:** All blockers resolved. Package ready for PyPI publish. Clean install verified.
