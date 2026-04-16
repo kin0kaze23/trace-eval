@@ -1,6 +1,6 @@
 # trace-eval Alpha Quickstart
 
-> **Goal:** Score your AI agent's session in under 2 minutes.
+> **Goal:** Score your AI agent's session and get actionable fixes in under 2 minutes.
 
 ## Install
 
@@ -12,7 +12,21 @@ No dependencies. No cloud. No API keys. Python 3.11+.
 
 ## Step 1: Find Your Trace
 
-trace-eval works with agent session files. Here's where to find them:
+Auto-discover recent traces across agents:
+
+```bash
+# Find recent traces (last 48 hours, all agents)
+trace-eval locate
+
+# Filter by agent type
+trace-eval locate claude-code
+trace-eval locate cursor
+
+# Search a wider window
+trace-eval locate --hours 72
+```
+
+Or find them manually:
 
 | Agent | Where to find traces |
 |-------|---------------------|
@@ -93,7 +107,51 @@ trace-eval run trace.jsonl --profile coding_agent
 trace-eval run trace.jsonl --profile rag_agent
 ```
 
-## Step 4: Compare Before vs After
+## Step 4: Get Remediation Recommendations
+
+After scoring, see what went wrong and how to fix it:
+
+```bash
+# Full scorecard with recommendations
+trace-eval run trace.jsonl --next-steps
+
+# Or just the remediation output
+trace-eval remediate trace.jsonl
+```
+
+Output shows ranked actions with confidence levels and approval requirements:
+
+```
+============================================================
+  REMEDIATION RECOMMENDATIONS  Score: 28.3/100 [Critical]
+============================================================
+
+  1. Fix command errors [REQUIRES APPROVAL]
+     Review and fix failed commands.
+     Confidence: high
+
+  2. Use appropriate scoring profile [AUTO-SAFE]
+     Switch to 'coding_agent' profile if retrieval is not applicable.
+     Confidence: high
+```
+
+### Generate a Full Report
+
+```bash
+trace-eval remediate trace.jsonl --report
+```
+
+Creates a markdown report with dimension scores table, ranked actions, suggested commands, and a ready-to-use CI workflow.
+
+### Auto-Apply Safe Fixes
+
+```bash
+trace-eval remediate trace.jsonl --apply-safe
+```
+
+Applies fixes that don't need approval (profile switches, CI gate generation). Error fixes and prompt changes always require your review first.
+
+## Step 5: Compare Before vs After
 
 If you've made changes and want to see if they helped:
 
@@ -116,7 +174,7 @@ Delta:  +66.5
 Resolved: 7 flags
 ```
 
-## Step 5: Gate Your CI (optional)
+## Step 6: Gate Your CI (optional)
 
 Add a quality threshold to your CI pipeline:
 
