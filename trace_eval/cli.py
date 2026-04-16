@@ -103,9 +103,9 @@ def cmd_run(args: argparse.Namespace) -> int:
         print(format_text(card, adapter_report=adapter_report))
 
     if getattr(args, "next_steps", False):
-        from trace_eval.remediation import analyze, format_remediation
+        from trace_eval.remediation import analyze, format_next_steps
         actions = analyze(card)
-        print("\n" + format_remediation(actions, card))
+        print(format_next_steps(actions, card))
 
     return 0
 
