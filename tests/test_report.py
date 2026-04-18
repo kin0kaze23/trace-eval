@@ -58,10 +58,20 @@ def test_json_format_is_valid():
 
 def test_json_has_required_fields():
     """JSON output must always include spec-mandated fields."""
+    from trace_eval.remediation import RemediationAction
     card = _make_card()
-    data = json.loads(format_json(card, adapter_report={"has_token_data": True}))
+    actions = [
+        RemediationAction(
+            action_type="fix_errors", label="Fix errors",
+            description="Fix.", confidence="high",
+            safe_to_automate=False, requires_approval=True,
+            triggered_by="test",
+        ),
+    ]
+    data = json.loads(format_json(card, adapter_report={"has_token_data": True}, actions=actions))
     # Spec-mandated fields that must always be present
     assert "total_score" in data
+    assert "rating" in data
     assert "dimension_scores" in data
     assert "friction_flags" in data
     assert "likely_causes" in data
@@ -71,6 +81,8 @@ def test_json_has_required_fields():
     assert "judge_coverage" in data
     assert "adapter_capability_report" in data
     assert "failed_thresholds" in data
+    assert "top_issues" in data
+    assert "top_actions" in data
 
 
 def _make_bad_card():
