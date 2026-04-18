@@ -395,6 +395,29 @@ def cmd_locate(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_loop(args: argparse.Namespace) -> int:
+    """Run the full trace-eval loop: locate -> convert -> score -> remediate."""
+    from trace_eval.loop import run_loop, format_loop_text, format_loop_json
+
+    result = run_loop(
+        agent_type=getattr(args, "agent_type", "all"),
+        hours=getattr(args, "hours", 48),
+        profile=getattr(args, "profile", None),
+        compare_path=getattr(args, "compare", None),
+        apply_safe=getattr(args, "apply_safe", False),
+        report=getattr(args, "report", False),
+        output_dir=getattr(args, "output", None),
+    )
+
+    use_json = getattr(args, "format", "text") == "json"
+    if use_json:
+        print(format_loop_json(result))
+    else:
+        print(format_loop_text(result))
+
+    return 1 if result.get("error") else 0
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="trace-eval",
@@ -463,6 +486,24 @@ def main():
     p_remediate.add_argument("--report", action="store_true",
                              help="Generate full markdown remediation report")
 
+    # loop
+    p_loop = sub.add_parser("loop", help="Full loop: locate -> convert -> score -> remediate")
+    p_loop.add_argument("agent_type", nargs="?", default="all",
+                        choices=["claude-code", "cursor", "openclaw", "all"],
+                        help="Agent type to search for (default: all)")
+    p_loop.add_argument("--hours", type=int, default=48,
+                        help="Search window in hours (default: 48)")
+    p_loop.add_argument("--profile", choices=list(PROFILES.keys()), default=None,
+                        help="Scoring profile (default: auto-detect)")
+    p_loop.add_argument("--compare", help="Path to previous trace for comparison")
+    p_loop.add_argument("--apply-safe", action="store_true",
+                        help="Apply safe fixes automatically")
+    p_loop.add_argument("--report", action="store_true",
+                        help="Generate markdown remediation report")
+    p_loop.add_argument("--output", help="Directory for generated files")
+    p_loop.add_argument("--format", choices=["text", "json"], default="text",
+                        help="Output format (default: text)")
+
     args = parser.parse_args()
 
     commands = {
@@ -473,6 +514,7 @@ def main():
         "convert": cmd_convert,
         "locate": cmd_locate,
         "remediate": cmd_remediate,
+        "loop": cmd_loop,
     }
 
     sys.exit(commands[args.command](args))
