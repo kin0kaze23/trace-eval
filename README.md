@@ -1,101 +1,142 @@
 # trace-eval
 
-> Tell me why this agent run went wrong and what to change next.
+> Evaluate AI agent runs. Fix the right thing. See if it improved.
 
 A deterministic-first CLI for evaluating AI agent traces. No dashboards, no LLM-as-judge, no cloud dependency. Built for solo builders and small AI-native teams using coding/CLI agents.
-
-## What It Does
-
-Run `trace-eval` on an agent trace file and get:
-
-- **A scorecard** — 0-100 across 5 dimensions
-- **Root causes** — critical and high-severity issues surfaced first
-- **Actionable suggestions** — what to fix, not just that something broke
-- **Before/after comparison** — see if your changes actually improved things
 
 ## Quick Start
 
 ```bash
-# 1. Install
 pip install trace-eval
-
-# 2. Convert your agent trace (auto-detects: Claude Code, OpenClaw, Cursor)
-trace-eval convert ~/.claude/projects/.../session.jsonl -o trace.jsonl
-
-# 3. Score it
-trace-eval run trace.jsonl
-
-# 4. Compare before/after a fix
-trace-eval compare before.jsonl after.jsonl
-
-# 5. Gate your CI
-trace-eval ci trace.jsonl --min-score 80
 ```
 
-For a complete walkthrough with real examples, see [examples/case_study.md](examples/case_study.md).
+One command to evaluate, diagnose, and remediate:
 
-## See It in Action
+```bash
+trace-eval loop
+```
 
-### Bad Run → Diagnosis
+That's it. `trace-eval loop` finds your most recent agent trace, scores it, identifies the top 3 issues, recommends the top 3 actions, and tells you what's safe to auto-fix.
+
+### Full Workflow
+
+```bash
+# 1. Locate + score your latest agent trace (auto-detects: Claude Code, OpenClaw, Cursor)
+trace-eval loop
+
+# 2. Apply safe fixes automatically
+trace-eval loop --apply-safe
+
+# 3. Compare to a previous run to measure improvement
+trace-eval loop --compare before.jsonl
+
+# 4. Generate a detailed remediation report
+trace-eval loop --report --output ./reports
+```
+
+## The Loop Command
+
+`trace-eval loop` chains the full evaluation pipeline: **locate → convert → score → remediate**. It finds your most recent agent trace, scores it across 5 dimensions, identifies the top 3 issues with severity, recommends the top 3 actions, and optionally applies safe fixes or compares to a baseline.
+
+### Example Output
 
 ```
-$ trace-eval run examples/hermes_bad.jsonl
+$ trace-eval loop
 ============================================================
-  TRACE-EVAL SCORECARD  Total: 32.4/100
+  TRACE-EVAL LOOP  v0.5.0
 ============================================================
 
-LIKELY ROOT CAUSES:
-  - Use canonical retrieval entrypoint
-  - Stop accessing deprecated files
-  - Context pressure exceeded 90% — reduce prompt size
+  Trace: session_abc123.jsonl (7.8MB, claude-code, just now)
+  Score: 30.0/100  [Critical]
+  TOP 3 ISSUES:
+  [-] reliability_errors (medium) — Review 31 error(s) at event indices [68, 149, ...
+  [-] efficiency_high_tokens (medium) — Reduce token usage with more focused prompts
+  [~] efficiency_high_tool_calls (low) — Excessive tool calls detected
+  NEXT ACTIONS:
+  1. [REQUIRES APPROVAL] Add CI quality gate
+  2. [REQUIRES APPROVAL] Fix command errors
+  3. [AUTO-SAFE] Use appropriate scoring profile
 ```
 
-### Quick Summary (`--summary`)
+### Closed-Loop Example
 
 ```
+# Bad run diagnosis
 $ trace-eval run examples/hermes_bad.jsonl --summary
-Score: 32.4/100
-Flags: retrieval_no_entrypoint, retrieval_deprecated_file, context_pressure_critical
-Weak: reliability=5, retrieval=0, context=32
+Score: 32.4/100 [Critical]
 Diagnosis: Agent run with significant friction.
+
+# Apply safe fixes
+$ trace-eval loop --apply-safe --output ./reports
+...
+  Safe fixes applied: [Add CI quality gate, Switch to coding_agent profile]
+
+# Compare to measure improvement
+$ trace-eval compare examples/hermes_bad.jsonl examples/hermes_good.jsonl --summary
+Before: 32.4/100
+After:  98.9/100
+Delta:  +66.5
+Resolved: 7 flags
 ```
 
-### Compare Before vs After
+### Command Reference
 
 ```
-$ trace-eval compare examples/hermes_bad.jsonl examples/hermes_good.jsonl
-COMPARISON: before vs after
-=======================================================
-  Total score:   32.4 ->   98.9
-  Change:      +66.5 (improved)
+trace-eval loop [agent_type] [options]
 
-  FLAG CHANGES:
-    [RESOLVED] context_compression
-    [RESOLVED] context_pressure_critical
-    [RESOLVED] reliability_errors
-    ...
+Positional:
+  agent_type    claude-code, cursor, openclaw, or all (default: all)
+
+Options:
+  --hours N     Search window in hours (default: 48)
+  --profile P   Scoring profile (default: auto-detect)
+  --compare F   Path to previous trace for comparison
+  --apply-safe  Apply safe fixes automatically
+  --report      Generate markdown remediation report
+  --output DIR  Directory for generated files
+  --format F    Output format: text (default) or json
 ```
 
-## Case Study
+### Machine-Readable Output (`--format json`)
 
-See [examples/case_study.md](examples/case_study.md) for a complete walkthrough:
-- **Bad run → diagnosis → fix → before/after comparison** (synthetic traces)
-- **Real Claude Code session** (3,694 events, 90 errors diagnosed in under 1 second)
-- **Real OpenClaw session** (158 events, 11 errors with actionable flags)
+For agent consumption, the loop command produces stable JSON:
 
-## Scoring Dimensions
+```json
+{
+  "trace": "session_abc123.jsonl",
+  "score": 30.0,
+  "rating": "Critical",
+  "top_issues": [
+    {"id": "reliability_errors", "severity": "medium", "suggestion": "..."}
+  ],
+  "top_actions": [
+    {"label": "Add CI quality gate", "safe_to_automate": true, "requires_approval": true}
+  ],
+  "safe_fixes_applied": ["Add CI quality gate", "Switch to coding_agent profile"],
+  "delta": {"before_score": 72.0, "after_score": 98.9, "delta": 26.9},
+  "report_path": "./reports/session_abc123_report.md"
+}
+```
 
-| Dimension | Weight | What It Measures |
-|-----------|--------|-----------------|
-| Reliability | 35% | Did it succeed? Errors, timeouts, partial results |
-| Efficiency | 20% | Token usage, cost, tool call density |
-| Retrieval | 20% | Canonical entrypoint, deprecated files, fallback search |
-| Tool Discipline | 15% | Retries, redundant calls, timeouts |
-| Context | 10% | Context pressure, warnings, compression events |
+## Advanced Usage
 
-Weights are configurable via profiles. Unscorable dimensions redistribute proportionally.
+All `loop` sub-steps are available as standalone commands for manual control or debugging.
 
-## Scoring Profiles
+### Manual Commands
+
+| Command | When to Use |
+|---------|-------------|
+| `trace-eval run trace.jsonl --summary` | Quick score of a specific trace |
+| `trace-eval run trace.jsonl --next-steps` | Score + remediation suggestions |
+| `trace-eval run trace.jsonl --format json` | Machine-readable output |
+| `trace-eval remediate trace.jsonl` | Full remediation with detailed actions |
+| `trace-eval compare before.jsonl after.jsonl` | Before/after comparison |
+| `trace-eval locate` | Find recent agent traces manually |
+| `trace-eval convert input.jsonl` | Convert non-canonical trace formats |
+| `trace-eval validate trace.jsonl` | Schema validation + field coverage |
+| `trace-eval ci trace.jsonl --min-score 80` | CI gate (exits non-zero below threshold) |
+
+### Scoring Profiles
 
 | Profile | Reliability | Efficiency | Retrieval | Tool Discipline | Context |
 |---------|------------|------------|-----------|-----------------|---------|
@@ -107,102 +148,44 @@ Weights are configurable via profiles. Unscorable dimensions redistribute propor
 trace-eval run trace.jsonl --profile coding_agent
 ```
 
-Unscorable dimensions (e.g., retrieval for coding agents) are automatically excluded and their weight redistributed to scorable dimensions.
+### Scoring Dimensions
 
-## Examples
+| Dimension | Weight | What It Measures |
+|-----------|--------|-----------------|
+| Reliability | 35% | Did it succeed? Errors, timeouts, partial results |
+| Efficiency | 20% | Token usage, cost, tool call density |
+| Retrieval | 20% | Canonical entrypoint, deprecated files, fallback search |
+| Tool Discipline | 15% | Retries, redundant calls, timeouts |
+| Context | 10% | Context pressure, warnings, compression events |
 
-| Trace | Source | Events | Score | File |
-|-------|--------|--------|-------|------|
-| Good run (synthetic) | Modeled after Hermes | 8 | 98.9 | `examples/hermes_good.jsonl` |
-| Bad run (synthetic) | Modeled after Hermes | 11 | 32.4 | `examples/hermes_bad.jsonl` |
-| Real Claude Code | Stillness project | 3,694 | 28.3 | `examples/claude_code_real.jsonl` |
-| Real Claude Code #2 | AutomationHub project | 1,969 | 28.3 | `examples/claude_code_real_2.jsonl` |
-| OpenClaw | Real session | 158 | 42.6 | `examples/openclaw_before.jsonl` |
-| Cursor sample | Synthetic coding session | 18 | 59.8 | `examples/cursor_sample.jsonl` |
+Weights are configurable via profiles. Unscorable dimensions redistribute proportionally.
 
-## Convert Your Traces
+## Supported Formats
 
-Don't have canonical JSONL? `trace-eval convert` handles native trace formats:
+| Format | Auto-detect | Adapter |
+|--------|------------|---------|
+| Claude Code | Yes | Full |
+| OpenClaw | Yes | Full |
+| Cursor | Yes | Full |
+| Canonical JSONL | Yes (passthrough) | Full |
+| Hermes SQLite | N/A (load directly) | Honest/lossy |
 
-```bash
-# Auto-detect format
-trace-eval convert ~/.claude/projects/.../session.jsonl -o trace.jsonl
-trace-eval convert ~/.openclaw/.../session.jsonl -o trace.jsonl
-trace-eval convert .cursor/.../transcript.jsonl -o trace.jsonl
+## Real Traces Evaluated
 
-# Explicit format
-trace-eval convert cursor session.jsonl -o trace.jsonl
+| Trace | Source | Events | Score | Top Issue |
+|-------|--------|--------|-------|-----------|
+| Bad run (synthetic) | Modeled after Hermes | 11 | 32.4 | No retrieval, 3 errors, context pressure |
+| Good run (synthetic) | Modeled after Hermes | 8 | 98.9 | All clear |
+| Claude Code (real) | Stillness project | 3,694 | 28.3 | 90 tool errors, high token usage |
+| OpenClaw (real) | Real session | 158 | 42.6 | 11 errors, zero reliability |
 
-# Then score
-trace-eval run trace.jsonl
-```
-
-| Format | Auto-detect | File Extension |
-|--------|------------|---------------|
-| Claude Code | Yes | `.jsonl` |
-| OpenClaw | Yes | `.jsonl` |
-| Cursor | Yes | `.jsonl` |
-| Canonical | Yes (passthrough) | `.jsonl` |
-| Hermes SQLite | N/A (load directly) | `.db` |
-
-## Agent Integration
-
-### Machine-readable output (`--format json`)
-
-```bash
-trace-eval run trace.jsonl --format json
-```
-
-Produces stable JSON output designed for agent self-diagnosis and remediation:
-
-```json
-{
-  "total_score": 32.43,
-  "dimension_scores": { "reliability": 5.0, "efficiency": 77.42, ... },
-  "friction_flags": [...],
-  "likely_causes": ["Use canonical retrieval entrypoint", ...],
-  "suggestions": ["Use canonical retrieval entrypoint", ...]
-}
-```
-
-**Agent remediation pattern:**
-1. Run `trace-eval run trace.jsonl --format json`
-2. Parse `likely_causes` — root-cause hypotheses
-3. Parse `suggestions` — each maps to a concrete fix
-4. Apply fixes, re-run the agent, compare the new trace
-
-### Quick summary (`--summary`)
-
-For concise output designed for both humans and agents:
-
-```
-$ trace-eval run trace.jsonl --summary
-Score: 28.3/100
-Flags: reliability_errors, efficiency_high_tokens, tool_redundant
-Weak: reliability=0, efficiency=30
-Diagnosis: Agent run with significant friction. fix errors (0/100 reliability). reduce token/tool usage.
-```
-
-## Adapters
-
-| Format | Adapter | Capability |
-|--------|---------|-----------|
-| JSONL (`.jsonl`) | Generic JSONL | Full — all fields available if present in file |
-| Hermes SQLite (`.db`) | Hermes | Honest/lossy — populates what exists, nulls what doesn't |
-
-Adding your own adapter? Implement `load(path) -> Trace` and `capability_report(trace) -> dict`.
-
-## What's Coming
-
-- More adapters (OpenAI traces, LangSmith, LangGraph, custom formats)
-- Baseline comparison (cost vs similar tasks)
-- Parallelization analysis in Tool Discipline
+See [examples/case_study.md](examples/case_study.md) for a complete walkthrough with the `loop` workflow.
 
 ## What This Is NOT
 
 - A dashboard — CLI-first, local-first
 - An LLM judge — all scoring is deterministic
-- An auto-fix tool — it tells you what to fix, not how
+- An auto-fix tool — it tells you what to fix; `--apply-safe` only applies vetted safe fixes
 - A broad observability platform — focused on agent trace evaluation
 
 ## License

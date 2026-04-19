@@ -121,7 +121,7 @@ def run_loop(
         return result
 
     try:
-        judge_results = {name: judge_fn(trace) for name, judge_fn in JUDGES.items()}
+        judge_results = {name: judge_fn(trace.events) for name, judge_fn in JUDGES.items()}
         card = compute_scorecard(judge_results, profile=profile)
         result["scorecard"] = card
     except Exception as e:
@@ -149,7 +149,7 @@ def run_loop(
         try:
             before_path = Path(compare_path)
             before_trace, _ = load_trace_with_report(before_path)
-            before_judges = {name: judge_fn(before_trace) for name, judge_fn in JUDGES.items()}
+            before_judges = {name: judge_fn(before_trace.events) for name, judge_fn in JUDGES.items()}
             before_card = compute_scorecard(before_judges, profile=profile)
             delta = round(card.total_score - before_card.total_score, 1)
             result["compare"] = {
@@ -198,8 +198,7 @@ def format_loop_text(result: dict) -> str:
         "=" * 60,
         "",
         f"  Trace: {result['trace_name']} ({result['trace_size']}, {result['trace_agent']}, {result['trace_age']})",
-        f"  Score: {card.total_score}/100  [{card.rating}]",
-        "",
+        f"  Score: {card.total_score:.1f}/100  [{card.rating}]",
     ]
 
     # Top 3 issues from all_flags sorted by severity
@@ -211,10 +210,8 @@ def format_loop_text(result: dict) -> str:
             prefix = "[!]" if f.severity in ("critical", "high") else "[-]" if f.severity == "medium" else "[~]"
             summary = f.suggestion[:60] + "..." if len(f.suggestion) > 60 else f.suggestion
             parts.append(f"  {prefix} {f.id} ({f.severity}) \u2014 {summary}")
-        parts.append("")
     else:
         parts.append("  No issues detected.")
-        parts.append("")
 
     # Next actions
     if actions:
@@ -228,15 +225,20 @@ def format_loop_text(result: dict) -> str:
     # Optional sections
     if result.get("safe_fixes_applied"):
         labels = ", ".join(fx.get("label", "?") for fx in result["safe_fixes_applied"])
-        parts.append(f"\n  Safe fixes applied: [{labels}]")
+        parts.append("")
+        parts.append(f"  Safe fixes applied: [{labels}]")
 
     if result.get("compare"):
         c = result["compare"]
         delta_str = f"+{c['delta']}" if c["delta"] >= 0 else str(c["delta"])
-        parts.append(f"  Delta vs {c['before_name']}: {delta_str} ({c['before_score']} -> {c['after_score']})")
+        parts.append(f"  Delta vs {c['before_name']}: {delta_str} ({c['before_score']:.0f} -> {c['after_score']:.0f})")
 
     if result.get("report_path"):
         parts.append(f"  Report: {result['report_path']}")
+
+    if result.get("_warnings"):
+        for w in result["_warnings"]:
+            parts.append(f"  WARN: {w}")
 
     return "\n".join(parts)
 
