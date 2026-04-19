@@ -1,5 +1,12 @@
 # External Alpha — trace-eval v0.5.0
 
+## When to Use
+
+**Run `trace-eval loop` after any meaningful agent task.**
+
+Good times: after a feature, refactor, bug fix, or frustrating run.
+Bad times: after every small prompt, during casual chat.
+
 ## Install
 
 ```bash
@@ -12,6 +19,32 @@ If PyPI hasn't updated yet, install from GitHub:
 ```bash
 pip install git+https://github.com/kin0kaze23/trace-eval.git@v0.5.0
 ```
+
+## Daily Use Alias
+
+Add to `~/.zshrc`:
+
+```bash
+alias eval="trace-eval loop"
+alias evalj="trace-eval loop --format json"
+```
+
+Then:
+
+```bash
+eval          # after any meaningful task
+evalj         # for agent self-check
+```
+
+## Agent Self-Check
+
+After completing a task, your agent can run:
+
+```bash
+trace-eval loop --format json
+```
+
+Then read `score`, `rating`, `top_issues`, and `top_actions`. If any action is marked `safe_to_automate: true` with `requires_approval: false`, the agent can apply it immediately. Otherwise, ask the user.
 
 ## Quick Test
 

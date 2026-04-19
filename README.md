@@ -18,6 +18,19 @@ trace-eval loop
 
 That's it. `trace-eval loop` finds your most recent agent trace, scores it, identifies the top 3 issues, recommends the top 3 actions, and tells you what's safe to auto-fix.
 
+### When to Use
+
+**Run `trace-eval loop` after any meaningful agent task.**
+
+| When | Example |
+|------|---------|
+| After a meaningful task | Finished a refactor, wrote a feature, fixed a bug |
+| After a failed or frustrating run | Agent got stuck, repeated errors, timed out |
+| Before/after a fix | Compare quality before and after your changes |
+| Before merge in CI | Gate PRs on agent run quality |
+
+**Not the best times:** after every tiny prompt, during casual chat, or mid-tool-call.
+
 ### Full Workflow
 
 ```bash
@@ -116,6 +129,37 @@ For agent consumption, the loop command produces stable JSON:
   "delta": {"before_score": 72.0, "after_score": 98.9, "delta": 26.9},
   "report_path": "./reports/session_abc123_report.md"
 }
+```
+
+### Agent Self-Check Pattern
+
+After completing a meaningful task, your agent can self-evaluate:
+
+```bash
+trace-eval loop --format json
+```
+
+The agent reads `score`, `rating`, `top_issues`, and `top_actions` from the output.
+If an action has `safe_to_automate: true` and `requires_approval: false`, the agent can run `trace-eval loop --apply-safe` immediately.
+Otherwise, the agent asks the user for approval before applying changes.
+
+### Shell Alias for Daily Use
+
+Add to your `~/.zshrc` or `~/.bashrc`:
+
+```bash
+alias eval="trace-eval loop"
+alias evalj="trace-eval loop --format json"
+alias evaledge="trace-eval loop --apply-safe --output ./eval-reports"
+```
+
+Then daily usage becomes:
+
+```bash
+eval          # after any meaningful task
+evalj         # for agent self-check
+evalledged    # apply safe fixes + save reports
+eval --compare before.jsonl  # measure improvement
 ```
 
 ## Advanced Usage
