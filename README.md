@@ -148,18 +148,20 @@ Otherwise, the agent asks the user for approval before applying changes.
 Add to your `~/.zshrc` or `~/.bashrc`:
 
 ```bash
-alias eval="trace-eval loop"
-alias evalj="trace-eval loop --format json"
-alias evaledge="trace-eval loop --apply-safe --output ./eval-reports"
+alias tev="trace-eval loop"
+alias tevj="trace-eval loop --format json"
+alias tevs="trace-eval loop --apply-safe --output ./eval-reports"
 ```
+
+> Note: Avoid aliasing as `eval` — that's a shell builtin.
 
 Then daily usage becomes:
 
 ```bash
-eval          # after any meaningful task
-evalj         # for agent self-check
-evalledged    # apply safe fixes + save reports
-eval --compare before.jsonl  # measure improvement
+tev          # after any meaningful task
+tevj         # for agent self-check
+tevs         # apply safe fixes + save reports
+tev --compare before.jsonl  # measure improvement
 ```
 
 ## Advanced Usage

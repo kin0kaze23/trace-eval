@@ -25,15 +25,17 @@ pip install git+https://github.com/kin0kaze23/trace-eval.git@v0.5.0
 Add to `~/.zshrc`:
 
 ```bash
-alias eval="trace-eval loop"
-alias evalj="trace-eval loop --format json"
+alias tev="trace-eval loop"
+alias tevj="trace-eval loop --format json"
 ```
+
+> Note: Avoid `eval` — that's a shell builtin.
 
 Then:
 
 ```bash
-eval          # after any meaningful task
-evalj         # for agent self-check
+tev          # after any meaningful task
+tevj         # for agent self-check
 ```
 
 ## Agent Self-Check
