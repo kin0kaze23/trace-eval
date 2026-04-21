@@ -39,3 +39,25 @@ Thumbs.db
 
 # Lock files (no deps to lock)
 uv.lock
+
+# Internal working documents (never commit to public repo)
+# Sprint notes, planning docs, AI assistant working files
+SPRINT*_DELIVERABLES.md
+ALPHA_BLOCKERS.md
+ALPHA_FEEDBACK.md
+ALPHA_FRICTION.md
+ALPHA_QUICKSTART.md
+ALPHA_CASE_STUDY_POST.md
+DOGFOOD_PLAN.md
+LAUNCH_ASSETS.md
+PYPI_RECOMMENDATION.md
+FEEDBACK_TEMPLATE.md
+WORKING_*.md
+DRAFT_*.md
+docs/superpowers/
+docs/agent-notes/
+docs/planning/
+docs/internal/
+.opencode/working/
+plans/
+working/
