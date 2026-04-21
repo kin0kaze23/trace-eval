@@ -433,6 +433,41 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_default(args: argparse.Namespace) -> int:
+    """Default behavior: evaluate the latest agent session.
+
+    This is the git-status-equivalent of trace-eval.
+    No subcommand needed — just `trace-eval`.
+    """
+    from trace_eval.loop import run_loop, format_loop_text
+
+    result = run_loop(
+        agent_type="all",
+        hours=getattr(args, "hours", 48),
+        profile=None,
+        compare_path=None,
+        apply_safe=False,
+        report=False,
+        output_dir=None,
+    )
+
+    use_json = getattr(args, "format", "text") == "json"
+    show_details = getattr(args, "details", False)
+
+    if use_json:
+        from trace_eval.loop import format_loop_json
+
+        print(format_loop_json(result))
+    elif show_details:
+        print(format_loop_text(result))
+    else:
+        from trace_eval.report import format_session_default
+
+        print(format_session_default(result))
+
+    return 1 if result.get("error") else 0
+
+
 def cmd_loop(args: argparse.Namespace) -> int:
     """Run the full trace-eval loop: locate -> convert -> score -> remediate."""
     from trace_eval.loop import run_loop, format_loop_text, format_loop_json
@@ -459,14 +494,34 @@ def cmd_loop(args: argparse.Namespace) -> int:
 def main():
     parser = argparse.ArgumentParser(
         prog="trace-eval",
-        description="Tell you why this agent run went wrong and what to change next.",
+        description="Evaluate your latest AI agent session. Run with no arguments to score the most recent trace.",
     )
     parser.add_argument(
         "--version",
         action="version",
         version=f"%(prog)s {__version__}",
     )
-    sub = parser.add_subparsers(dest="command", required=True)
+    # Global options that work with or without a subcommand
+    parser.add_argument(
+        "--hours",
+        type=int,
+        default=48,
+        help="Search window in hours for default and loop (default: 48)",
+    )
+    parser.add_argument(
+        "--json",
+        dest="format",
+        const="json",
+        default="text",
+        action="store_const",
+        help="JSON output (machine-readable, for agents)",
+    )
+    parser.add_argument(
+        "--details",
+        action="store_true",
+        help="Full scorecard output (same as `trace-eval loop`)",
+    )
+    sub = parser.add_subparsers(dest="command", required=False)
 
     # validate
     p_validate = sub.add_parser(
@@ -650,7 +705,11 @@ def main():
         "loop": cmd_loop,
     }
 
-    sys.exit(commands[args.command](args))
+    # Default: no command given — evaluate latest session
+    if args.command is None:
+        sys.exit(cmd_default(args))
+    else:
+        sys.exit(commands[args.command](args))
 
 
 if __name__ == "__main__":

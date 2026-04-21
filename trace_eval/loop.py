@@ -139,6 +139,12 @@ def run_loop(
         result["error"] = f"Remediation analysis failed: {e}"
         return result
 
+    # Step 4b: Extract context for plain-English output
+    result["token_info"] = _extract_token_summary(trace.events)
+    result["tool_info"] = _extract_tool_summary(trace.events)
+    result["retry_info"] = _extract_retry_summary(trace.events)
+    result["error_summary"] = _extract_error_summary(trace.events, card.all_flags)
+
     # Step 5: Apply-safe (if flagged)
     if apply_safe:
         try:
@@ -353,3 +359,56 @@ def _no_traces_error(agent_type: str, hours: int) -> str:
     parts.append("  • Diagnose setup: trace-eval doctor")
 
     return "\n".join(parts)
+
+
+def _extract_token_summary(events):
+    """Extract token usage for plain-English output."""
+    total_tokens = sum((e.tokens_in or 0) + (e.tokens_out or 0) for e in events)
+    llm_calls = sum(
+        1
+        for e in events
+        if e.event_type is not None and e.event_type.value == "llm_call"
+    )
+    return {"total_tokens": total_tokens, "llm_calls": llm_calls}
+
+
+def _extract_tool_summary(events):
+    """Extract tool call counts for plain-English output."""
+    total = sum(
+        1
+        for e in events
+        if e.event_type is not None and e.event_type.value == "tool_call"
+    )
+    return {"total": total}
+
+
+def _extract_retry_summary(events):
+    """Extract tool retry counts for plain-English output."""
+    tool_calls = [
+        e
+        for e in events
+        if e.event_type is not None and e.event_type.value == "tool_call"
+    ]
+    retries = 0
+    for i in range(1, len(tool_calls)):
+        prev = tool_calls[i - 1]
+        curr = tool_calls[i]
+        if (
+            curr.tool_name == prev.tool_name
+            and prev.status is not None
+            and prev.status.value == "error"
+            and curr.status is not None
+            and curr.status.value == "success"
+        ):
+            retries += 1
+    return {"total": retries}
+
+
+def _extract_error_summary(events, flags):
+    """Extract error counts by tool for plain-English output."""
+    error_tools: dict[str, int] = {}
+    for e in events:
+        if e.status is not None and e.status.value == "error":
+            tool = e.tool_name or "unknown"
+            error_tools[tool] = error_tools.get(tool, 0) + 1
+    return error_tools
