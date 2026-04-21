@@ -1,12 +1,36 @@
 # Case Study: The Embedded Improvement Loop
 
-## Walkthrough: Bad Run → Diagnosis → Safe Fix → Compare
+## Walkthrough: Setup → Bad Run → Diagnosis → Safe Fix → Compare
 
 An AI agent was tasked with refactoring a database layer. The run failed with repeated file write failures, a timeout, and context compression. Without a systematic diagnosis, a developer would need to eyeball the entire trace.
 
-Here's what `trace-eval loop` found in under a second.
+### Step 0: First Run — Verify Setup
+
+```
+$ trace-eval doctor
+============================================================
+  TRACE-EVAL DOCTOR  v0.5.0
+============================================================
+
+INSTALLATION:
+  Version:  0.5.0
+  Python:   3.12.x
+  Status:   OK
+
+AGENT DETECTION:
+  [+] claude-code    — 3 trace(s) found in last 48h
+  [-] openclaw       — Directory not found
+  [-] cursor         — Directory not found
+
+RECOMMENDED:
+  $ trace-eval loop
+```
+
+Doctor confirms: installation works, agent traces found, recommended next command is `trace-eval loop`.
 
 ### Step 1: Loop Diagnosis
+
+Here's what `trace-eval loop` found in under a second:
 
 ```
 $ trace-eval loop

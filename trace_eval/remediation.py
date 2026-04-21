@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from trace_eval.scoring import Scorecard
-from trace_eval.schema import FrictionFlag
+from trace_eval.schema import Event, FrictionFlag
 
 ACTION_TYPES = {
     "reduce_retries": {
@@ -69,6 +69,7 @@ class RemediationAction:
     safe_to_automate: bool
     requires_approval: bool
     triggered_by: str
+    context: dict[str, str] = field(default_factory=dict)
 
 
 def analyze(card: Scorecard) -> list[RemediationAction]:
@@ -76,35 +77,155 @@ def analyze(card: Scorecard) -> list[RemediationAction]:
 
     Rules are deterministic: specific flag patterns and dimension scores
     map to specific recommended actions.
+
+    This is the legacy entry point — for enriched actions with trace context,
+    use analyze_with_context(card, events).
     """
+    return _analyze_rules(card, events=None)
+
+
+def analyze_with_context(
+    card: Scorecard, events: list[Event]
+) -> list[RemediationAction]:
+    """Analyze a scorecard with full trace context for specific remediation.
+
+    Enriches action labels and descriptions with actual failure data:
+    - Which tools failed and how often
+    - What error patterns appeared
+    - Specific event indices and counts
+    """
+    return _analyze_rules(card, events=events)
+
+
+def _analyze_rules(
+    card: Scorecard, events: list[Event] | None
+) -> list[RemediationAction]:
+    """Core rule engine. If events are provided, enriches actions with context."""
     actions: list[RemediationAction] = []
     flag_ids = {f.id for f in card.all_flags}
     dim_scores = card.dimension_scores
 
+    # Extract contextual failure data if events are available
+    error_tools: dict[str, int] = {}
+    error_patterns: list[str] = []
+    tool_retry_tools: dict[str, int] = {}
+    total_errors = 0
+    if events:
+        error_tools, error_patterns, tool_retry_tools, total_errors = (
+            _extract_failure_context(events, card.all_flags)
+        )
+
     # Rule 1: reliability errors → fix_errors
     if "reliability_errors" in flag_ids:
-        actions.append(_make_action("fix_errors", "reliability_errors"))
+        if error_tools and total_errors > 0:
+            # Enriched: reference specific tools and counts
+            top_tools = sorted(error_tools.items(), key=lambda x: -x[1])[:3]
+            tool_strs = [f"{name} ({count}x)" for name, count in top_tools]
+            actions.append(
+                _make_action_enriched(
+                    "fix_errors",
+                    "reliability_errors",
+                    label=f"Fix {total_errors} command error(s)",
+                    description=(
+                        f"Most frequent failures: {', '.join(tool_strs)}. "
+                        f"Common patterns: {', '.join(error_patterns[:3])}. "
+                        f"Review error events and add pre-conditions or guards."
+                    ),
+                )
+            )
+        else:
+            actions.append(_make_action("fix_errors", "reliability_errors"))
 
     # Rule 2: low reliability score → fix_errors (broader catch)
     rel_score = dim_scores.get("reliability")
     if rel_score is not None and rel_score < 50:
         if not any(a.action_type == "fix_errors" for a in actions):
-            actions.append(_make_action("fix_errors", "low_reliability_score"))
+            if error_tools and total_errors > 0:
+                top_tools = sorted(error_tools.items(), key=lambda x: -x[1])[:3]
+                tool_strs = [f"{name} ({count}x)" for name, count in top_tools]
+                actions.append(
+                    _make_action_enriched(
+                        "fix_errors",
+                        "low_reliability_score",
+                        label=f"Fix reliability ({rel_score:.0f}/100) — {total_errors} error(s)",
+                        description=(
+                            f"Failing tools: {', '.join(tool_strs)}. "
+                            f"Patterns: {', '.join(error_patterns[:3])}. "
+                            f"Add error handling or pre-conditions before these calls."
+                        ),
+                    )
+                )
+            else:
+                actions.append(_make_action("fix_errors", "low_reliability_score"))
 
     # Rule 3: high token usage → reduce_prompt_size
     if "efficiency_high_tokens" in flag_ids:
-        actions.append(_make_action("reduce_prompt_size", "efficiency_high_tokens"))
+        token_info = _extract_token_context(events) if events else None
+        if token_info:
+            actions.append(
+                _make_action_enriched(
+                    "reduce_prompt_size",
+                    "efficiency_high_tokens",
+                    label=f"Reduce token usage ({token_info['total_tokens']:,} tokens)",
+                    description=(
+                        f"Agent used {token_info['total_tokens']:,} tokens across "
+                        f"{token_info['llm_calls']} LLM calls. "
+                        f"Break tasks into smaller steps or use focused prompts."
+                    ),
+                )
+            )
+        else:
+            actions.append(_make_action("reduce_prompt_size", "efficiency_high_tokens"))
 
     # Rule 4: high tool calls → reduce_tool_calls
     if "efficiency_high_tool_calls" in flag_ids:
-        actions.append(_make_action("reduce_tool_calls", "efficiency_high_tool_calls"))
+        tool_info = _extract_tool_context(events) if events else None
+        if tool_info:
+            top_tools = sorted(tool_info.items(), key=lambda x: -x[1])[:3]
+            tool_strs = [f"{name} ({count}x)" for name, count in top_tools]
+            actions.append(
+                _make_action_enriched(
+                    "reduce_tool_calls",
+                    "efficiency_high_tool_calls",
+                    label=f"Reduce tool call volume ({tool_info['total']} calls)",
+                    description=(
+                        f"Most used tools: {', '.join(tool_strs)}. "
+                        f"Batch operations where possible — combine reads, use wildcards."
+                    ),
+                )
+            )
+        else:
+            actions.append(
+                _make_action("reduce_tool_calls", "efficiency_high_tool_calls")
+            )
 
     # Rule 5: tool retries/redundant → reduce_retries
     if "tool_retries" in flag_ids or "tool_redundant" in flag_ids:
-        actions.append(_make_action("reduce_retries", "tool_discipline_issue"))
+        retry_label = "Reduce tool call retries"
+        retry_desc = "Add branch guards or pre-conditions before tool calls to avoid repeated failures."
+        if tool_retry_tools:
+            top_retry = sorted(tool_retry_tools.items(), key=lambda x: -x[1])[:3]
+            retry_strs = [f"{name} ({count}x)" for name, count in top_retry]
+            retry_label = f"Reduce tool retries ({', '.join(retry_strs)})"
+            retry_desc = (
+                f"These tools retried after failure: {', '.join(retry_strs)}. "
+                f"Pre-check conditions (file exists, permissions, branch) before calling."
+            )
+        actions.append(
+            _make_action_enriched(
+                "reduce_retries",
+                "tool_discipline_issue",
+                label=retry_label,
+                description=retry_desc,
+            )
+        )
 
     # Rule 6: retrieval issues → improve_retrieval
-    retrieval_flags = {"retrieval_no_entrypoint", "retrieval_deprecated_file", "retrieval_fallback_search"}
+    retrieval_flags = {
+        "retrieval_no_entrypoint",
+        "retrieval_deprecated_file",
+        "retrieval_fallback_search",
+    }
     if flag_ids & retrieval_flags:
         actions.append(_make_action("improve_retrieval", "retrieval_issue"))
 
@@ -123,12 +244,147 @@ def analyze(card: Scorecard) -> list[RemediationAction]:
     return actions[:5]  # Top 5 actions
 
 
+def _extract_failure_context(
+    events: list[Event], flags: list[FrictionFlag]
+) -> tuple[dict[str, int], list[str], dict[str, int], int]:
+    """Extract tool failure context from events.
+
+    Returns:
+        - error_tools: {tool_name: count} of tools that produced errors
+        - error_patterns: list of error pattern descriptions
+        - tool_retry_tools: {tool_name: count} of tools that retried
+        - total_errors: total error count
+    """
+    error_tools: dict[str, int] = {}
+    tool_retry_tools: dict[str, int] = {}
+    total_errors = 0
+
+    error_event_indices = set()
+    for f in flags:
+        if f.event_index is not None:
+            error_event_indices.add(f.event_index)
+
+    # Count errors by tool name
+    error_events = [
+        e for e in events if e.status is not None and e.status.value == "error"
+    ]
+    total_errors = len(error_events)
+
+    for e in error_events:
+        tool = e.tool_name or "unknown"
+        error_tools[tool] = error_tools.get(tool, 0) + 1
+
+    # Detect retry patterns (same tool error then success)
+    tool_calls = [
+        e
+        for e in events
+        if e.event_type is not None and e.event_type.value == "tool_call"
+    ]
+    for i in range(1, len(tool_calls)):
+        prev = tool_calls[i - 1]
+        curr = tool_calls[i]
+        if (
+            curr.tool_name == prev.tool_name
+            and prev.status is not None
+            and prev.status.value == "error"
+            and curr.status is not None
+            and curr.status.value == "success"
+        ):
+            tool_name = curr.tool_name or "unknown"
+            tool_retry_tools[tool_name] = tool_retry_tools.get(tool_name, 0) + 1
+
+    # Detect error patterns from event metadata
+    patterns: list[str] = []
+    error_types = set()
+    for e in error_events:
+        if e.error_type:
+            error_types.add(e.error_type)
+
+    if error_types:
+        patterns.extend(list(error_types)[:3])
+
+    # Infer patterns from tool names
+    if "Bash" in error_tools or "bash" in error_tools:
+        patterns.append("command execution")
+    if "Write" in error_tools or "write" in error_tools:
+        patterns.append("file write")
+    if "Read" in error_tools or "read" in error_tools:
+        patterns.append("file read")
+    if "Glob" in error_tools or "glob" in error_tools:
+        patterns.append("file search")
+    if "Edit" in error_tools or "edit" in error_tools:
+        patterns.append("file edit")
+
+    # Deduplicate patterns
+    seen = set()
+    unique_patterns = []
+    for p in patterns:
+        if p not in seen:
+            seen.add(p)
+            unique_patterns.append(p)
+
+    return error_tools, unique_patterns, tool_retry_tools, total_errors
+
+
+def _extract_token_context(events: list[Event]) -> dict | None:
+    """Extract token usage context from events."""
+    total_tokens = sum((e.tokens_in or 0) + (e.tokens_out or 0) for e in events)
+    if total_tokens == 0:
+        return None
+
+    llm_calls = sum(
+        1
+        for e in events
+        if e.event_type is not None and e.event_type.value == "llm_call"
+    )
+
+    return {
+        "total_tokens": total_tokens,
+        "llm_calls": llm_calls,
+    }
+
+
+def _extract_tool_context(events: list[Event]) -> dict | None:
+    """Extract tool call context from events."""
+    tool_counts: dict[str, int] = {}
+    total = 0
+    for e in events:
+        if e.event_type is not None and e.event_type.value == "tool_call":
+            name = e.tool_name or "unknown"
+            tool_counts[name] = tool_counts.get(name, 0) + 1
+            total += 1
+
+    if total == 0:
+        return None
+
+    tool_counts["total"] = total
+    return tool_counts
+
+
 def _make_action(action_type: str, triggered_by: str) -> RemediationAction:
     template = ACTION_TYPES[action_type]
     return RemediationAction(
         action_type=action_type,
         label=template["label"],
         description=template["description"],
+        confidence=template["confidence"],
+        safe_to_automate=template["safe_to_automate"],
+        requires_approval=template["requires_approval"],
+        triggered_by=triggered_by,
+    )
+
+
+def _make_action_enriched(
+    action_type: str,
+    triggered_by: str,
+    label: str,
+    description: str,
+) -> RemediationAction:
+    template = ACTION_TYPES[action_type]
+    return RemediationAction(
+        action_type=action_type,
+        label=label,
+        description=description,
         confidence=template["confidence"],
         safe_to_automate=template["safe_to_automate"],
         requires_approval=template["requires_approval"],
@@ -152,7 +408,11 @@ def format_remediation(actions: list[RemediationAction], card: Scorecard) -> str
     top_3 = actions[:3]
     lines.append("  TOP 3 ACTIONS:")
     for i, action in enumerate(top_3, 1):
-        approval_tag = "[AUTO-SAFE]" if (action.safe_to_automate and not action.requires_approval) else "[REQUIRES APPROVAL]"
+        approval_tag = (
+            "[AUTO-SAFE]"
+            if (action.safe_to_automate and not action.requires_approval)
+            else "[REQUIRES APPROVAL]"
+        )
         lines.append(f"  {i}. {approval_tag} {action.label}")
         lines.append(f"     {action.description}")
         lines.append(f"     Confidence: {action.confidence}")
@@ -163,12 +423,18 @@ def format_remediation(actions: list[RemediationAction], card: Scorecard) -> str
     if remaining:
         lines.append("  Additional actions:")
         for i, action in enumerate(remaining, 4):
-            approval_tag = "[AUTO-SAFE]" if (action.safe_to_automate and not action.requires_approval) else "[REQUIRES APPROVAL]"
+            approval_tag = (
+                "[AUTO-SAFE]"
+                if (action.safe_to_automate and not action.requires_approval)
+                else "[REQUIRES APPROVAL]"
+            )
             lines.append(f"  {i}. {approval_tag} {action.label}")
             lines.append(f"     {action.description}")
             lines.append("")
 
-    lines.append("To auto-apply safe fixes: trace-eval remediate trace.jsonl --apply-safe")
+    lines.append(
+        "To auto-apply safe fixes: trace-eval remediate trace.jsonl --apply-safe"
+    )
     lines.append("To generate full report: trace-eval remediate trace.jsonl --report")
     return "\n".join(lines)
 
@@ -183,6 +449,10 @@ def format_next_steps(actions: list[RemediationAction], card: Scorecard) -> str:
         "Next steps:",
     ]
     for i, action in enumerate(actions[:3], 1):
-        approval_tag = "[AUTO-SAFE]" if (action.safe_to_automate and not action.requires_approval) else "[REQUIRES APPROVAL]"
+        approval_tag = (
+            "[AUTO-SAFE]"
+            if (action.safe_to_automate and not action.requires_approval)
+            else "[REQUIRES APPROVAL]"
+        )
         lines.append(f"  {i}. {approval_tag} {action.label}")
     return "\n".join(lines)

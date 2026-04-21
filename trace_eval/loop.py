@@ -70,8 +70,7 @@ def run_loop(
         return result
 
     if not locations:
-        result["error"] = "No recent traces found."
-        result["hint"] = "Try: trace-eval loop --hours 72"
+        result["error"] = _no_traces_error(agent_type, hours)
         return result
 
     loc = locations[0]
@@ -121,7 +120,9 @@ def run_loop(
         return result
 
     try:
-        judge_results = {name: judge_fn(trace.events) for name, judge_fn in JUDGES.items()}
+        judge_results = {
+            name: judge_fn(trace.events) for name, judge_fn in JUDGES.items()
+        }
         card = compute_scorecard(judge_results, profile=profile)
         result["scorecard"] = card
     except Exception as e:
@@ -130,7 +131,9 @@ def run_loop(
 
     # Step 4: Remediate
     try:
-        actions = analyze(card)
+        from trace_eval.remediation import analyze_with_context
+
+        actions = analyze_with_context(card, trace.events)
         result["actions"] = actions
     except Exception as e:
         result["error"] = f"Remediation analysis failed: {e}"
@@ -149,7 +152,9 @@ def run_loop(
         try:
             before_path = Path(compare_path)
             before_trace, _ = load_trace_with_report(before_path)
-            before_judges = {name: judge_fn(before_trace.events) for name, judge_fn in JUDGES.items()}
+            before_judges = {
+                name: judge_fn(before_trace.events) for name, judge_fn in JUDGES.items()
+            }
             before_card = compute_scorecard(before_judges, profile=profile)
             delta = round(card.total_score - before_card.total_score, 1)
             result["compare"] = {
@@ -207,8 +212,16 @@ def format_loop_text(result: dict) -> str:
     if top_flags:
         parts.append("  TOP 3 ISSUES:")
         for f in top_flags:
-            prefix = "[!]" if f.severity in ("critical", "high") else "[-]" if f.severity == "medium" else "[~]"
-            summary = f.suggestion[:60] + "..." if len(f.suggestion) > 60 else f.suggestion
+            prefix = (
+                "[!]"
+                if f.severity in ("critical", "high")
+                else "[-]"
+                if f.severity == "medium"
+                else "[~]"
+            )
+            summary = (
+                f.suggestion[:60] + "..." if len(f.suggestion) > 60 else f.suggestion
+            )
             parts.append(f"  {prefix} {f.id} ({f.severity}) \u2014 {summary}")
     else:
         parts.append("  No issues detected.")
@@ -217,7 +230,11 @@ def format_loop_text(result: dict) -> str:
     if actions:
         parts.append("  NEXT ACTIONS:")
         for i, a in enumerate(actions[:3], 1):
-            tag = "[AUTO-SAFE]" if (a.safe_to_automate and not a.requires_approval) else "[REQUIRES APPROVAL]"
+            tag = (
+                "[AUTO-SAFE]"
+                if (a.safe_to_automate and not a.requires_approval)
+                else "[REQUIRES APPROVAL]"
+            )
             parts.append(f"  {i}. {tag} {a.label}")
     else:
         parts.append("  No recommended actions. Score looks good.")
@@ -231,7 +248,9 @@ def format_loop_text(result: dict) -> str:
     if result.get("compare"):
         c = result["compare"]
         delta_str = f"+{c['delta']}" if c["delta"] >= 0 else str(c["delta"])
-        parts.append(f"  Delta vs {c['before_name']}: {delta_str} ({c['before_score']:.0f} -> {c['after_score']:.0f})")
+        parts.append(
+            f"  Delta vs {c['before_name']}: {delta_str} ({c['before_score']:.0f} -> {c['after_score']:.0f})"
+        )
 
     if result.get("report_path"):
         parts.append(f"  Report: {result['report_path']}")
@@ -245,12 +264,17 @@ def format_loop_text(result: dict) -> str:
 
 def format_loop_json(result: dict) -> str:
     """JSON formatter for agents."""
+    if result.get("error"):
+        output = {
+            "error": result["error"],
+        }
+        return json.dumps(output, indent=2)
+
     card = result["scorecard"]
     flags = sorted(card.all_flags, key=lambda f: SEVERITY_ORDER.get(f.severity, 9))[:3]
 
     top_issues = [
-        {"id": f.id, "severity": f.severity, "suggestion": f.suggestion}
-        for f in flags
+        {"id": f.id, "severity": f.severity, "suggestion": f.suggestion} for f in flags
     ]
 
     actions = result["actions"][:3]
@@ -269,7 +293,9 @@ def format_loop_json(result: dict) -> str:
         "rating": card.rating,
         "top_issues": top_issues,
         "top_actions": top_actions,
-        "safe_fixes_applied": [fx.get("label", "?") for fx in result.get("safe_fixes_applied", [])],
+        "safe_fixes_applied": [
+            fx.get("label", "?") for fx in result.get("safe_fixes_applied", [])
+        ],
         "delta": result.get("compare"),
         "report_path": result.get("report_path"),
     }
@@ -285,3 +311,45 @@ def _human_size(size_bytes: int) -> str:
     else:
         mb = size_bytes / (1024 * 1024)
         return f"{mb:.0f}MB" if mb >= 10 else f"{mb:.1f}MB"
+
+
+def _no_traces_error(agent_type: str, hours: int) -> str:
+    """Build a helpful error message when no traces are found."""
+    from trace_eval.locate import SEARCH_PATHS
+    import os
+
+    agents_to_search = (
+        ["claude-code", "cursor", "openclaw"] if agent_type == "all" else [agent_type]
+    )
+
+    # Check which agent directories exist
+    missing_agents = []
+    found_agents = []
+    for agent in agents_to_search:
+        dirs = SEARCH_PATHS.get(agent, [])
+        if dirs and os.path.isdir(dirs[0]):
+            found_agents.append(agent)
+        else:
+            missing_agents.append(agent)
+
+    parts = ["No recent traces found."]
+    parts.append("")
+
+    if missing_agents:
+        agent_names = ", ".join(missing_agents)
+        parts.append(f"Agent directories not found for: {agent_names}")
+        parts.append("  → Install the agent and run a task first")
+
+    if found_agents:
+        agent_names = ", ".join(found_agents)
+        parts.append(f"Agent directories exist for: {agent_names}")
+        parts.append(f"  → No traces found in the last {hours}h")
+        parts.append("  → Run a meaningful task, then try again")
+
+    parts.append("")
+    parts.append("Options:")
+    parts.append("  • Widen search: trace-eval loop --hours 168")
+    parts.append("  • Convert a specific file: trace-eval convert <path>")
+    parts.append("  • Diagnose setup: trace-eval doctor")
+
+    return "\n".join(parts)

@@ -1,9 +1,41 @@
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.pyo
 *.egg-info/
+*.egg
+
+# Build
 dist/
 build/
+*.whl
+
+# Environments
 .venv/
+venv/
+env/
+*.env
+
+# Test
 .pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
 .DS_Store
+Thumbs.db
+
+# Data
 *.db
+*.sqlite
+
+# Lock files (no deps to lock)
+uv.lock

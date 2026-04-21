@@ -10,7 +10,17 @@ A deterministic-first CLI for evaluating AI agent traces. No dashboards, no LLM-
 pip install trace-eval
 ```
 
-One command to evaluate, diagnose, and remediate:
+### First Run: Check Your Setup
+
+```bash
+trace-eval doctor
+```
+
+This confirms your installation, detects which agents you have, finds your trace files, and tells you exactly what to run next.
+
+### Evaluate Your Agent
+
+Once doctor confirms traces are available:
 
 ```bash
 trace-eval loop
@@ -34,6 +44,9 @@ That's it. `trace-eval loop` finds your most recent agent trace, scores it, iden
 ### Full Workflow
 
 ```bash
+# 0. Verify your setup (first run only)
+trace-eval doctor
+
 # 1. Locate + score your latest agent trace (auto-detects: Claude Code, OpenClaw, Cursor)
 trace-eval loop
 
@@ -149,6 +162,7 @@ Add to your `~/.zshrc` or `~/.bashrc`:
 
 ```bash
 alias tev="trace-eval loop"
+alias tevd="trace-eval doctor"
 alias tevj="trace-eval loop --format json"
 alias tevs="trace-eval loop --apply-safe --output ./eval-reports"
 ```
@@ -158,6 +172,7 @@ alias tevs="trace-eval loop --apply-safe --output ./eval-reports"
 Then daily usage becomes:
 
 ```bash
+tevd         # first run — check your setup
 tev          # after any meaningful task
 tevj         # for agent self-check
 tevs         # apply safe fixes + save reports
@@ -172,6 +187,7 @@ All `loop` sub-steps are available as standalone commands for manual control or 
 
 | Command | When to Use |
 |---------|-------------|
+| `trace-eval doctor` | First run — diagnose installation and trace availability |
 | `trace-eval run trace.jsonl --summary` | Quick score of a specific trace |
 | `trace-eval run trace.jsonl --next-steps` | Score + remediation suggestions |
 | `trace-eval run trace.jsonl --format json` | Machine-readable output |

@@ -7,8 +7,14 @@ import json
 import sys
 from pathlib import Path
 
+from trace_eval import __version__
 from trace_eval.loader import load_trace_with_report
-from trace_eval.scoring import compute_scorecard, DEFAULT_PROFILE, REQUIRED_JUDGES, PROFILES
+from trace_eval.scoring import (
+    compute_scorecard,
+    DEFAULT_PROFILE,
+    REQUIRED_JUDGES,
+    PROFILES,
+)
 from trace_eval.report import format_text, format_json, format_summary
 from trace_eval.judges.reliability import judge_reliability
 from trace_eval.judges.efficiency import judge_efficiency
@@ -45,14 +51,13 @@ def cmd_validate(args: argparse.Namespace) -> int:
     if indices != sorted(indices):
         errors.append("Events are not in order by event_index")
 
-    unknown_types = [
-        e.event_index for e in trace.events if e.event_type is None
-    ]
+    unknown_types = [e.event_index for e in trace.events if e.event_type is None]
     if unknown_types:
         errors.append(f"Unknown event types at indices: {unknown_types}")
 
     # Field coverage
     from trace_eval.schema import FieldCoverage
+
     coverage = FieldCoverage.compute(trace.events)
 
     if errors:
@@ -96,15 +101,17 @@ def cmd_run(args: argparse.Namespace) -> int:
     if getattr(args, "summary", False):
         print(format_summary(card))
     elif args.format == "json":
-        from trace_eval.remediation import analyze
-        actions = analyze(card)
+        from trace_eval.remediation import analyze_with_context
+
+        actions = analyze_with_context(card, trace.events)
         print(format_json(card, adapter_report=adapter_report, actions=actions))
     else:
         print(format_text(card, adapter_report=adapter_report))
 
     if getattr(args, "next_steps", False):
-        from trace_eval.remediation import analyze, format_next_steps
-        actions = analyze(card)
+        from trace_eval.remediation import analyze_with_context, format_next_steps
+
+        actions = analyze_with_context(card, trace.events)
         print(format_next_steps(actions, card))
 
     return 0
@@ -149,7 +156,9 @@ def cmd_compare(args: argparse.Namespace) -> int:
     if args.format != "json":
         print("COMPARISON: before vs after")
         print("=" * 55)
-        print(f"  Total score: {before_card.total_score:6.1f} -> {after_card.total_score:6.1f}")
+        print(
+            f"  Total score: {before_card.total_score:6.1f} -> {after_card.total_score:6.1f}"
+        )
         total_delta = after_card.total_score - before_card.total_score
         if total_delta > 0:
             print(f"  Change:      +{total_delta:.1f} (improved)")
@@ -261,12 +270,16 @@ def cmd_ci(args: argparse.Namespace) -> int:
 
     # Check total score threshold
     if card.total_score < min_score:
-        failed_thresholds.append({
-            "type": "total_score_below_threshold",
-            "threshold": min_score,
-            "actual": card.total_score,
-        })
-        failure_lines.append(f"total score {card.total_score:.1f} < minimum {min_score}")
+        failed_thresholds.append(
+            {
+                "type": "total_score_below_threshold",
+                "threshold": min_score,
+                "actual": card.total_score,
+            }
+        )
+        failure_lines.append(
+            f"total score {card.total_score:.1f} < minimum {min_score}"
+        )
 
     # Check per-dimension thresholds
     if args.min_dimension:
@@ -275,17 +288,23 @@ def cmd_ci(args: argparse.Namespace) -> int:
             threshold = float(threshold)
             actual = card.dimension_scores.get(dim)
             if actual is not None and actual < threshold:
-                failed_thresholds.append({
-                    "type": "dimension_below_threshold",
-                    "dimension": dim,
-                    "threshold": threshold,
-                    "actual": actual,
-                })
+                failed_thresholds.append(
+                    {
+                        "type": "dimension_below_threshold",
+                        "dimension": dim,
+                        "threshold": threshold,
+                        "actual": actual,
+                    }
+                )
                 failure_lines.append(f"{dim} score {actual:.1f} < minimum {threshold}")
 
     # Always output scorecard on stdout
     if use_json:
-        output = json.loads(format_json(card, adapter_report=adapter_report, failed_thresholds=failed_thresholds))
+        output = json.loads(
+            format_json(
+                card, adapter_report=adapter_report, failed_thresholds=failed_thresholds
+            )
+        )
         print(json.dumps(output, indent=2))
     else:
         print(format_text(card, adapter_report=adapter_report))
@@ -316,7 +335,10 @@ def cmd_convert(args: argparse.Namespace) -> int:
     if fmt == "unknown":
         print(f"Error: could not detect trace format for {input_path}", file=sys.stderr)
         print(f"Supported formats: {', '.join(CONVERTERS.keys())}", file=sys.stderr)
-        print(f"Or specify format explicitly: trace-eval convert <format> {input_path}", file=sys.stderr)
+        print(
+            f"Or specify format explicitly: trace-eval convert <format> {input_path}",
+            file=sys.stderr,
+        )
         return 1
 
     if fmt == "canonical":
@@ -361,13 +383,15 @@ def cmd_remediate(args: argparse.Namespace) -> int:
     judge_results = {name: fn(trace.events) for name, fn in JUDGES.items()}
     card = compute_scorecard(judge_results, profile=profile)
 
-    from trace_eval.remediation import analyze, format_remediation
-    actions = analyze(card)
+    from trace_eval.remediation import analyze_with_context, format_remediation
+
+    actions = analyze_with_context(card, trace.events)
     print(format_remediation(actions, card))
 
     # If --apply-safe flag, also generate safe fixes
     if getattr(args, "apply_safe", False):
         from trace_eval.autofix import apply_safe_fixes
+
         fixes = apply_safe_fixes(actions, card, path)
         print("\n" + "=" * 60)
         print("  SAFE FIXES APPLIED")
@@ -378,6 +402,7 @@ def cmd_remediate(args: argparse.Namespace) -> int:
     # If --report flag, generate markdown report
     if getattr(args, "report", False):
         from trace_eval.autofix import generate_remediation_report
+
         report_path = generate_remediation_report(actions, card, path)
         print(f"\n  Report saved: {report_path}")
 
@@ -386,12 +411,25 @@ def cmd_remediate(args: argparse.Namespace) -> int:
 
 def cmd_locate(args: argparse.Namespace) -> int:
     from trace_eval.locate import locate, format_locate
+
     locations = locate(
         agent_type=getattr(args, "agent_type", "all"),
         limit=getattr(args, "limit", 20),
         hours=getattr(args, "hours", 48),
     )
     print(format_locate(locations))
+    return 0
+
+
+def cmd_doctor(args: argparse.Namespace) -> int:
+    from trace_eval.doctor import run_doctor, format_doctor_text, format_doctor_json
+
+    result = run_doctor()
+    use_json = getattr(args, "format", "text") == "json"
+    if use_json:
+        print(format_doctor_json(result))
+    else:
+        print(format_doctor_text(result))
     return 0
 
 
@@ -423,86 +461,180 @@ def main():
         prog="trace-eval",
         description="Tell you why this agent run went wrong and what to change next.",
     )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {__version__}",
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     # validate
-    p_validate = sub.add_parser("validate", help="Schema validation + field coverage + adapter capabilities")
+    p_validate = sub.add_parser(
+        "validate", help="Schema validation + field coverage + adapter capabilities"
+    )
     p_validate.add_argument("trace", help="Path to trace file (.jsonl or .db)")
 
     # run
     p_run = sub.add_parser("run", help="Full scorecard")
     p_run.add_argument("trace", help="Path to trace file")
-    p_run.add_argument("--format", choices=["text", "json"], default="text", help="Output format (default: text)")
-    p_run.add_argument("--profile", choices=list(PROFILES.keys()), default=None,
-                       help="Scoring profile (default: auto-detect from trace)")
-    p_run.add_argument("--summary", action="store_true",
-                       help="Concise output: score, top flags, diagnosis (for humans + agents)")
-    p_run.add_argument("--next-steps", action="store_true",
-                       help="Show remediation recommendations after scorecard")
+    p_run.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        help="Output format (default: text)",
+    )
+    p_run.add_argument(
+        "--profile",
+        choices=list(PROFILES.keys()),
+        default=None,
+        help="Scoring profile (default: auto-detect from trace)",
+    )
+    p_run.add_argument(
+        "--summary",
+        action="store_true",
+        help="Concise output: score, top flags, diagnosis (for humans + agents)",
+    )
+    p_run.add_argument(
+        "--next-steps",
+        action="store_true",
+        help="Show remediation recommendations after scorecard",
+    )
 
     # compare
     p_compare = sub.add_parser("compare", help="Delta between two traces")
     p_compare.add_argument("before", help="Path to before trace")
     p_compare.add_argument("after", help="Path to after trace")
-    p_compare.add_argument("--format", choices=["text", "json"], default="text", help="Output format (default: text)")
-    p_compare.add_argument("--summary", action="store_true",
-                           help="Concise before/after comparison")
+    p_compare.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        help="Output format (default: text)",
+    )
+    p_compare.add_argument(
+        "--summary", action="store_true", help="Concise before/after comparison"
+    )
 
     # ci
     p_ci = sub.add_parser("ci", help="CI gate -- exits non-zero below threshold")
     p_ci.add_argument("trace", help="Path to trace file")
-    p_ci.add_argument("--min-score", type=float, default=80, help="Minimum total score (default: 80)")
-    p_ci.add_argument("--min-dimension", action="append", help="Per-dimension threshold (e.g., reliability=90)")
-    p_ci.add_argument("--allow-partial", action="store_true", help="Allow unscorable judges")
-    p_ci.add_argument("--format", choices=["text", "json"], default="text", help="Output format (default: text)")
-    p_ci.add_argument("--profile", choices=list(PROFILES.keys()), default=None,
-                      help="Scoring profile (default: auto-detect from trace)")
+    p_ci.add_argument(
+        "--min-score", type=float, default=80, help="Minimum total score (default: 80)"
+    )
+    p_ci.add_argument(
+        "--min-dimension",
+        action="append",
+        help="Per-dimension threshold (e.g., reliability=90)",
+    )
+    p_ci.add_argument(
+        "--allow-partial", action="store_true", help="Allow unscorable judges"
+    )
+    p_ci.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        help="Output format (default: text)",
+    )
+    p_ci.add_argument(
+        "--profile",
+        choices=list(PROFILES.keys()),
+        default=None,
+        help="Scoring profile (default: auto-detect from trace)",
+    )
 
     # convert
-    p_convert = sub.add_parser("convert", help="Convert non-canonical traces to canonical JSONL")
+    p_convert = sub.add_parser(
+        "convert", help="Convert non-canonical traces to canonical JSONL"
+    )
     p_convert.add_argument("input", help="Path to trace file to convert")
-    p_convert.add_argument("format_type", nargs="?", default=None,
-                           choices=["claude-code", "openclaw", "cursor"],
-                           help="Trace format (auto-detected if omitted)")
-    p_convert.add_argument("-o", "--output", help="Output path (default: <input>_canonical.jsonl)")
+    p_convert.add_argument(
+        "format_type",
+        nargs="?",
+        default=None,
+        choices=["claude-code", "openclaw", "cursor"],
+        help="Trace format (auto-detected if omitted)",
+    )
+    p_convert.add_argument(
+        "-o", "--output", help="Output path (default: <input>_canonical.jsonl)"
+    )
 
     # locate
     p_locate = sub.add_parser("locate", help="Find recent agent trace files")
-    p_locate.add_argument("agent_type", nargs="?", default="all",
-                          choices=["claude-code", "cursor", "openclaw", "all"],
-                          help="Agent type to search for (default: all)")
-    p_locate.add_argument("--limit", type=int, default=20,
-                          help="Maximum results (default: 20)")
-    p_locate.add_argument("--hours", type=int, default=48,
-                          help="Search window in hours (default: 48)")
+    p_locate.add_argument(
+        "agent_type",
+        nargs="?",
+        default="all",
+        choices=["claude-code", "cursor", "openclaw", "all"],
+        help="Agent type to search for (default: all)",
+    )
+    p_locate.add_argument(
+        "--limit", type=int, default=20, help="Maximum results (default: 20)"
+    )
+    p_locate.add_argument(
+        "--hours", type=int, default=48, help="Search window in hours (default: 48)"
+    )
+
+    # doctor
+    p_doctor = sub.add_parser(
+        "doctor", help="Diagnose installation, trace availability, and readiness"
+    )
+    p_doctor.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        help="Output format (default: text)",
+    )
 
     # remediate
-    p_remediate = sub.add_parser("remediate", help="Get recommended actions to improve agent run quality")
+    p_remediate = sub.add_parser(
+        "remediate", help="Get recommended actions to improve agent run quality"
+    )
     p_remediate.add_argument("trace", help="Path to trace file")
-    p_remediate.add_argument("--profile", choices=list(PROFILES.keys()), default=None,
-                             help="Scoring profile")
-    p_remediate.add_argument("--apply-safe", action="store_true",
-                             help="Apply safe fixes automatically")
-    p_remediate.add_argument("--report", action="store_true",
-                             help="Generate full markdown remediation report")
+    p_remediate.add_argument(
+        "--profile", choices=list(PROFILES.keys()), default=None, help="Scoring profile"
+    )
+    p_remediate.add_argument(
+        "--apply-safe", action="store_true", help="Apply safe fixes automatically"
+    )
+    p_remediate.add_argument(
+        "--report",
+        action="store_true",
+        help="Generate full markdown remediation report",
+    )
 
     # loop
-    p_loop = sub.add_parser("loop", help="Full loop: locate -> convert -> score -> remediate")
-    p_loop.add_argument("agent_type", nargs="?", default="all",
-                        choices=["claude-code", "cursor", "openclaw", "all"],
-                        help="Agent type to search for (default: all)")
-    p_loop.add_argument("--hours", type=int, default=48,
-                        help="Search window in hours (default: 48)")
-    p_loop.add_argument("--profile", choices=list(PROFILES.keys()), default=None,
-                        help="Scoring profile (default: auto-detect)")
+    p_loop = sub.add_parser(
+        "loop", help="Full loop: locate -> convert -> score -> remediate"
+    )
+    p_loop.add_argument(
+        "agent_type",
+        nargs="?",
+        default="all",
+        choices=["claude-code", "cursor", "openclaw", "all"],
+        help="Agent type to search for (default: all)",
+    )
+    p_loop.add_argument(
+        "--hours", type=int, default=48, help="Search window in hours (default: 48)"
+    )
+    p_loop.add_argument(
+        "--profile",
+        choices=list(PROFILES.keys()),
+        default=None,
+        help="Scoring profile (default: auto-detect)",
+    )
     p_loop.add_argument("--compare", help="Path to previous trace for comparison")
-    p_loop.add_argument("--apply-safe", action="store_true",
-                        help="Apply safe fixes automatically")
-    p_loop.add_argument("--report", action="store_true",
-                        help="Generate markdown remediation report")
+    p_loop.add_argument(
+        "--apply-safe", action="store_true", help="Apply safe fixes automatically"
+    )
+    p_loop.add_argument(
+        "--report", action="store_true", help="Generate markdown remediation report"
+    )
     p_loop.add_argument("--output", help="Directory for generated files")
-    p_loop.add_argument("--format", choices=["text", "json"], default="text",
-                        help="Output format (default: text)")
+    p_loop.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        help="Output format (default: text)",
+    )
 
     args = parser.parse_args()
 
@@ -513,6 +645,7 @@ def main():
         "ci": cmd_ci,
         "convert": cmd_convert,
         "locate": cmd_locate,
+        "doctor": cmd_doctor,
         "remediate": cmd_remediate,
         "loop": cmd_loop,
     }

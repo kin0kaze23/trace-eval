@@ -1,91 +1,150 @@
 # External Alpha — trace-eval v0.5.0
 
-## When to Use
+> For alpha testers. Takes ~5 minutes.
 
-**Run `trace-eval loop` after any meaningful agent task.**
+## What is trace-eval?
 
-Good times: after a feature, refactor, bug fix, or frustrating run.
-Bad times: after every small prompt, during casual chat.
+A CLI that evaluates AI agent runs. Tell it what went wrong, what to fix next, and whether it improved. No dashboards, no LLM-as-judge, no cloud dependency.
 
-## Install
+---
+
+## Part 1: Install
 
 ```bash
 pip install trace-eval
-trace-eval --version  # should show 0.5.0
+trace-eval --version    # should show 0.5.0
 ```
 
-If PyPI hasn't updated yet, install from GitHub:
+If PyPI is not updated yet, install from GitHub:
 
 ```bash
 pip install git+https://github.com/kin0kaze23/trace-eval.git@v0.5.0
 ```
 
-## Daily Use Alias
+---
 
-Add to `~/.zshrc`:
+## Part 2: Run the Alpha Script
+
+Run these commands in order. Copy the output of each one.
+
+### Step 1: Diagnose your setup
 
 ```bash
-alias tev="trace-eval loop"
-alias tevj="trace-eval loop --format json"
+trace-eval doctor
 ```
 
-> Note: Avoid `eval` — that's a shell builtin.
+Expected: Shows version, which agents are detected, how many traces found, and a recommended next command.
 
-Then:
+**If you see errors here, stop and report them.** This means the install or trace detection is broken.
 
-```bash
-tev          # after any meaningful task
-tevj         # for agent self-check
-```
-
-## Agent Self-Check
-
-After completing a task, your agent can run:
+### Step 2: Evaluate your latest trace
 
 ```bash
-trace-eval loop --format json
-```
-
-Then read `score`, `rating`, `top_issues`, and `top_actions`. If any action is marked `safe_to_automate: true` with `requires_approval: false`, the agent can apply it immediately. Otherwise, ask the user.
-
-## Quick Test
-
-```bash
-# 1. Evaluate your latest agent trace (auto-detects Claude Code, OpenClaw, Cursor)
 trace-eval loop
-
-# 2. Machine-readable output
-trace-eval loop --format json
-
-# 3. Compare to a previous run
-trace-eval loop --compare before.jsonl
 ```
+
+Expected: Finds your most recent trace, scores it, shows top 3 issues and top 3 actions.
+
+**If it says "No recent traces found":**
+- Try `trace-eval loop --hours 168` (wider search)
+- Or find a trace manually and run `trace-eval run path/to/trace.jsonl`
+
+### Step 3: Get specific fix recommendations
+
+```bash
+trace-eval loop --report --output ./eval-reports
+```
+
+Expected: Generates a markdown report with detailed remediation. Check `./eval-reports/` for the file.
+
+### Step 4: Evaluate a specific trace (optional)
+
+```bash
+trace-eval run path/to/specific-trace.jsonl --summary
+```
+
+Expected: Quick score + diagnosis in under 10 lines.
+
+### Step 5: Compare two traces (optional)
+
+If you have a before/after trace:
+
+```bash
+trace-eval compare before.jsonl after.jsonl --summary
+```
+
+Expected: Shows score delta and which issues were resolved or new.
+
+---
+
+## Part 3: Feedback Checklist
+
+Please fill this out and send it back. Copy/paste is fine.
+
+### Install
+
+- [ ] `pip install trace-eval` worked: **Yes / No** (if no, what error?)
+- [ ] `trace-eval --version` shows `0.5.0`: **Yes / No**
+
+### Doctor
+
+- [ ] `trace-eval doctor` ran successfully: **Yes / No**
+- [ ] It correctly detected my agent(s): **Yes / No** (which agent?)
+- [ ] It found my trace files: **Yes / No**
+- [ ] The recommended next command made sense: **Yes / No / Somewhat**
+
+### Loop (Evaluation)
+
+- [ ] `trace-eval loop` found and scored a trace: **Yes / No**
+- [ ] The score (0-100) made sense for this run: **Yes / No / Somewhat**
+  - If no: what did you expect?
+- [ ] The [Critical/Good/Needs Work/Excellent] rating felt accurate: **Yes / No / Somewhat**
+- [ ] The "Top 3 Issues" matched what you'd actually look at: **Yes / No / Partially**
+  - Which issue was wrong or missing?
+- [ ] The "Top 3 Actions" were useful: **Yes / No / Partially**
+  - Which action was wrong or missing?
+
+### Remediation Specificity
+
+- [ ] Fix recommendations referenced specific tools/failures: **Yes / No**
+- [ ] They told you *what* failed, not just "fix errors": **Yes / No**
+- [ ] They told you *what to change*: **Yes / No / Somewhat**
+
+### Approval Tags
+
+- [ ] `[AUTO-SAFE]` vs `[REQUIRES APPROVAL]` felt useful: **Yes / No / Somewhat**
+- [ ] Would you trust an auto-safe fix to run without review: **Yes / No / Depends**
+
+### First-Run Friction
+
+- [ ] Total time from install to first score: **< 1 min / 1-5 min / > 5 min**
+- [ ] Points where you got stuck or confused: **(describe each)**
+- [ ] Any error messages that were unclear: **(quote them)**
+
+### Expectations vs Reality
+
+- [ ] Did trace-eval do anything you didn't expect? **(describe)**
+- [ ] Did it NOT do something you expected? **(describe)**
+- [ ] Would you use this again: **Definitely / Probably / Maybe / No**
+
+### Agent Context
+
+- What agent do you use: **Claude Code / Cursor / OpenClaw / Other: ___**
+- What was the task you evaluated: **(briefly describe)**
+- How many events in your trace: **(rough estimate)**
+
+---
 
 ## Troubleshooting
 
-### "No recent traces found"
-The loop command searches your filesystem for recent agent trace files.
-- Increase the search window: `trace-eval loop --hours 72`
-- Or score a specific file: `trace-eval run path/to/trace.jsonl --summary`
+| Problem | Try |
+|---------|-----|
+| "No recent traces found" | `trace-eval loop --hours 168` |
+| "Could not detect trace format" | `trace-eval convert path/to/file.jsonl` |
+| Doctor shows no agents installed | Install Claude Code, Cursor, or OpenClaw first |
+| Score seems wrong | Run `trace-eval validate path/to/trace.jsonl` to check the trace |
+| Want machine-readable output | Add `--format json` to any command |
 
-### "Score computation failed"
-The trace file may be corrupted or in an unsupported format.
-- Validate it first: `trace-eval validate path/to/trace.jsonl`
-- Convert if needed: `trace-eval convert path/to/trace.jsonl`
+## Questions?
 
-### Trace from an unsupported agent
-Currently supported: Claude Code, OpenClaw, Cursor, and any agent that produces JSONL traces with canonical event structure.
-- Your trace file needs to be JSONL (one JSON object per line)
-- Each event should have at minimum: `event_type`, `event_index`, `timestamp`
-
-## What to Report
-
-After trying it, send feedback on:
-
-1. **Installation** — did `pip install trace-eval` work? Any issues?
-2. **First run** — did `trace-eval loop` find and score a trace?
-3. **Top 3 issues** — did they match what you'd actually look at in the trace?
-4. **Top 3 actions** — did the recommended fixes make sense?
-5. **Approval tags** — did [AUTO-SAFE] vs [REQUIRES APPROVAL] feel useful?
-6. **Where you got stuck** — any confusing error messages or dead ends?
-7. **What you expected** — anything the tool didn't do that you thought it would?
+Open an issue at https://github.com/kin0kaze23/trace-eval or reply to this message.
