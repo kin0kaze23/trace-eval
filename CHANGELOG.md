@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.0 (2026-04-24)
+
+### Added
+- `install_capability` RemediationAction type for agent-ready integration
+- Detection of missing-tool patterns (e.g. `command not found: vercel`) in trace events and friction flags
+- Static capability ID mapping (`_CAPABILITY_HINTS`) mapping error patterns to agent-ready capability IDs
+- One `install_capability` action emitted per distinct capability_id; deduped across multiple matching patterns
+- Synthetic fixture `tests/fixtures/trace_missing_vercel.jsonl` for deterministic testing
+- Actions include `context` with `capability_id` and `suggested_command` (e.g. `agent-ready fix --capability vercel_cli`)
+- `confidence: "high"`, `safe_to_automate: False`, `requires_approval: True` — installs always need user approval
+
 ## 0.5.0 (2026-04-19)
 
 ### Added

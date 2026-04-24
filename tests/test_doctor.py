@@ -13,7 +13,7 @@ from trace_eval.doctor import (
 def test_doctor_returns_version():
     result = run_doctor()
     assert "version" in result
-    assert result["version"] == "0.5.0"
+    assert result["version"] == "0.6.0"
 
 
 def test_doctor_returns_python_version():
@@ -47,7 +47,7 @@ def test_doctor_total_traces():
 def test_doctor_text_format_has_version():
     result = run_doctor()
     output = format_doctor_text(result)
-    assert "0.5.0" in output
+    assert "0.6.0" in output
 
 
 def test_doctor_text_format_has_installation():
