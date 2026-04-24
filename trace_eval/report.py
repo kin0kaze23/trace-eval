@@ -288,8 +288,27 @@ def format_session_default(result: dict) -> str:
     retry_info = result.get("retry_info", {})
 
     lines: list[str] = []
-    lines.append(f"Session — {card.total_score:.1f}/100 ({interpretation})")
+
+    # Score line with visual indicator
+    score_icon = _score_icon(card.total_score)
+    lines.append(f"{score_icon} Session score: {card.total_score:.0f}/100 — {interpretation}")
     lines.append("")
+
+    # Task context (if available)
+    task_label = result.get("task_label")
+    task_agent = result.get("trace_agent", "")
+    session_duration = result.get("session_duration")
+    if task_label or task_agent:
+        parts = []
+        if task_agent:
+            agent_display = _agent_display_name(task_agent)
+            parts.append(f"Agent: {agent_display}")
+        if task_label:
+            parts.append(f"Task: {task_label}")
+        if session_duration:
+            parts.append(f"Duration: {session_duration}")
+        lines.append(" | ".join(parts))
+        lines.append("")
 
     # Problem summary line
     problem_parts = []
@@ -315,7 +334,8 @@ def format_session_default(result: dict) -> str:
     if actions:
         lines.append("What to fix:")
         for i, action in enumerate(actions[:3], 1):
-            lines.append(f"  {i}. {action.description}")
+            tag = _action_tag(action)
+            lines.append(f"  {i}. {tag} {action.description}")
         lines.append("")
         lines.append("More detail: trace-eval --details")
         lines.append("For agents:  trace-eval --json")
@@ -323,3 +343,33 @@ def format_session_default(result: dict) -> str:
         lines.append("No issues detected. Session looks clean.")
 
     return "\n".join(lines)
+
+
+def _score_icon(score: float) -> str:
+    """Return a visual indicator for the score."""
+    if score >= 80:
+        return "✓"
+    elif score >= 60:
+        return "~"
+    elif score >= 40:
+        return "!"
+    else:
+        return "✗"
+
+
+def _agent_display_name(agent_type: str) -> str:
+    """Convert internal agent type to a display name."""
+    names = {
+        "claude-code": "Claude Code",
+        "openclaw": "OpenClaw",
+        "cursor": "Cursor",
+        "canonical": "Agent",
+    }
+    return names.get(agent_type, agent_type.title())
+
+
+def _action_tag(action) -> str:
+    """Return a short tag for the action type."""
+    if action.safe_to_automate and not action.requires_approval:
+        return "[auto-fix]"
+    return "[needs your OK]"

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import tempfile
+from datetime import UTC
 from pathlib import Path
 
 from trace_eval import __version__
@@ -53,6 +54,9 @@ def run_loop(
         "trace_size": "",
         "trace_age": "",
         "trace_agent": "",
+        "task_label": None,
+        "task_id": None,
+        "session_duration": None,
         "scorecard": None,
         "actions": [],
         "adapter_report": {},
@@ -142,6 +146,9 @@ def run_loop(
     result["tool_info"] = _extract_tool_summary(trace.events)
     result["retry_info"] = _extract_retry_summary(trace.events)
     result["error_summary"] = _extract_error_summary(trace.events, card.all_flags)
+    result["task_label"] = _extract_task_label(trace.events)
+    result["task_id"] = _extract_task_id(trace.events)
+    result["session_duration"] = _extract_session_duration(trace.events)
 
     # Step 5: Apply-safe (if flagged)
     if apply_safe:
@@ -195,35 +202,61 @@ def format_loop_text(result: dict) -> str:
 
     card = result["scorecard"]
     actions = result["actions"]
+
+    # Score icon
+    score_icon = (
+        "✓" if card.total_score >= 80 else "~" if card.total_score >= 60 else "!" if card.total_score >= 40 else "✗"
+    )
+
     parts = [
         "=" * 60,
-        f"  TRACE-EVAL LOOP  v{__version__}",
+        f"  TRACE-EVAL  v{__version__}  |  Score: {score_icon} {card.total_score:.0f}/100 [{card.rating}]",
         "=" * 60,
         "",
-        f"  Trace: {result['trace_name']} ({result['trace_size']}, {result['trace_agent']}, {result['trace_age']})",
-        f"  Score: {card.total_score:.1f}/100  [{card.rating}]",
     ]
+
+    # Task context
+    task_label = result.get("task_label")
+    task_agent = result.get("trace_agent", "")
+    session_duration = result.get("session_duration")
+    context_parts = []
+    if task_agent:
+        names = {"claude-code": "Claude Code", "openclaw": "OpenClaw", "cursor": "Cursor"}
+        context_parts.append(names.get(task_agent, task_agent.title()))
+    if task_label:
+        context_parts.append(task_label)
+    if session_duration:
+        context_parts.append(session_duration)
+    if context_parts:
+        parts.append(f"  {result['trace_name']} ({result['trace_size']})")
+        parts.append(f"  {' | '.join(context_parts)}")
+    else:
+        parts.append(f"  {result['trace_name']} ({result['trace_size']}, {task_agent}, {result['trace_age']})")
 
     # Top 3 issues from all_flags sorted by severity
     flags = sorted(card.all_flags, key=lambda f: SEVERITY_ORDER.get(f.severity, 9))
     top_flags = flags[:3]
     if top_flags:
-        parts.append("  TOP 3 ISSUES:")
+        parts.append("")
+        parts.append("  Issues found:")
         for f in top_flags:
-            prefix = "[!]" if f.severity in ("critical", "high") else "[-]" if f.severity == "medium" else "[~]"
-            summary = f.suggestion[:60] + "..." if len(f.suggestion) > 60 else f.suggestion
-            parts.append(f"  {prefix} {f.id} ({f.severity}) \u2014 {summary}")
+            icon = "✗" if f.severity in ("critical", "high") else "~" if f.severity == "medium" else "."
+            summary = f.suggestion[:70] + "..." if len(f.suggestion) > 70 else f.suggestion
+            parts.append(f"  {icon} {summary}")
     else:
-        parts.append("  No issues detected.")
+        parts.append("")
+        parts.append("  ✓ No issues detected.")
 
     # Next actions
     if actions:
-        parts.append("  NEXT ACTIONS:")
+        parts.append("")
+        parts.append("  Recommended actions:")
         for i, a in enumerate(actions[:3], 1):
-            tag = "[AUTO-SAFE]" if (a.safe_to_automate and not a.requires_approval) else "[REQUIRES APPROVAL]"
+            tag = "[auto-fix]" if (a.safe_to_automate and not a.requires_approval) else "[needs your OK]"
             parts.append(f"  {i}. {tag} {a.label}")
     else:
-        parts.append("  No recommended actions. Score looks good.")
+        parts.append("")
+        parts.append("  ✓ No recommended actions. Score looks good.")
 
     # Optional sections
     if result.get("safe_fixes_applied"):
@@ -234,7 +267,8 @@ def format_loop_text(result: dict) -> str:
     if result.get("compare"):
         c = result["compare"]
         delta_str = f"+{c['delta']}" if c["delta"] >= 0 else str(c["delta"])
-        parts.append(f"  Delta vs {c['before_name']}: {delta_str} ({c['before_score']:.0f} -> {c['after_score']:.0f})")
+        parts.append("")
+        parts.append(f"  Delta vs {c['before_name']}: {delta_str} ({c['before_score']:.0f} → {c['after_score']:.0f})")
 
     if result.get("report_path"):
         parts.append(f"  Report: {result['report_path']}")
@@ -311,23 +345,25 @@ def _no_traces_error(agent_type: str, hours: int) -> str:
         else:
             missing_agents.append(agent)
 
-    parts = ["No recent traces found."]
+    names = {"claude-code": "Claude Code", "openclaw": "OpenClaw", "cursor": "Cursor"}
+    parts = ["No recent agent sessions found."]
     parts.append("")
 
     if missing_agents:
-        agent_names = ", ".join(missing_agents)
-        parts.append(f"Agent directories not found for: {agent_names}")
-        parts.append("  → Install the agent and run a task first")
+        agent_display = ", ".join(names.get(a, a) for a in missing_agents)
+        parts.append(f"Agent not installed: {agent_display}")
+        parts.append("  Install one, then run a task with it.")
 
     if found_agents:
-        agent_names = ", ".join(found_agents)
-        parts.append(f"Agent directories exist for: {agent_names}")
-        parts.append(f"  → No traces found in the last {hours}h")
-        parts.append("  → Run a meaningful task, then try again")
+        agent_display = ", ".join(names.get(a, a) for a in found_agents)
+        parts.append(f"Agent found: {agent_display}")
+        parts.append(f"  But no sessions in the last {hours}h.")
+        parts.append("  → Try: run a task with your AI agent, then try again.")
 
     parts.append("")
-    parts.append("Options:")
-    parts.append("  • Widen search: trace-eval loop --hours 168")
+    parts.append("Try:")
+    parts.append("  • Widen search: trace-eval --hours 168")
+    parts.append("  • Check setup:   trace-eval doctor")
     parts.append("  • Convert a specific file: trace-eval convert <path>")
     parts.append("  • Diagnose setup: trace-eval doctor")
 
@@ -373,3 +409,50 @@ def _extract_error_summary(events, flags):
             tool = e.tool_name or "unknown"
             error_tools[tool] = error_tools.get(tool, 0) + 1
     return error_tools
+
+
+def _extract_task_label(events) -> str | None:
+    """Extract the human-readable task label from trace events."""
+    for e in events:
+        if e.task_label:
+            return e.task_label
+    return None
+
+
+def _extract_task_id(events) -> str | None:
+    """Extract the task ID from trace events."""
+    for e in events:
+        if e.task_id:
+            return e.task_id
+    return None
+
+
+def _extract_session_duration(events) -> str | None:
+    """Compute session duration from first to last event timestamp."""
+    timestamps = []
+    for e in events:
+        if e.timestamp:
+            try:
+                from datetime import datetime
+
+                ts = e.timestamp
+                if ts.endswith("Z"):
+                    ts = ts[:-1] + "+00:00"
+                dt = datetime.fromisoformat(ts)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=UTC)
+                timestamps.append(dt)
+            except (ValueError, TypeError):
+                continue
+    if len(timestamps) < 2:
+        return None
+    duration = max(timestamps) - min(timestamps)
+    total_seconds = int(duration.total_seconds())
+    if total_seconds < 60:
+        return f"{total_seconds}s"
+    elif total_seconds < 3600:
+        return f"{total_seconds // 60}m {total_seconds % 60}s"
+    else:
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        return f"{hours}h {minutes}m"
