@@ -2,10 +2,27 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 from trace_eval.scoring import Scorecard
 from trace_eval.schema import Event, FrictionFlag
+
+# v1 static mapping: missing-tool patterns → agent-ready capability IDs.
+# Not imported from agent-ready — trace-eval references by string only.
+_CAPABILITY_HINTS = {
+    # pattern (case-insensitive regex) → agent-ready capability ID
+    r"command not found:\s*vercel": "vercel_cli",
+    r"vercel:\s*command not found": "vercel_cli",
+    r"command not found:\s*gh\b": "github_cli",
+    r"gh:\s*command not found": "github_cli",
+    r"command not found:\s*node\b": "nodejs",
+    r"node:\s*command not found": "nodejs",
+    r"command not found:\s*python3?": "python",
+    r"python3?:\s*command not found": "python",
+    r"ModuleNotFoundError": "python",
+    r"Cannot find module\s+['\"]": "nodejs",
+}
 
 ACTION_TYPES = {
     "reduce_retries": {
@@ -55,6 +72,13 @@ ACTION_TYPES = {
         "description": "Add trace-eval CI gate to prevent low-quality agent runs from being merged.",
         "confidence": "high",
         "safe_to_automate": True,
+        "requires_approval": True,
+    },
+    "install_capability": {
+        "label": "Install missing capability",
+        "description": "A required tool is not installed in the environment.",
+        "confidence": "high",
+        "safe_to_automate": False,
         "requires_approval": True,
     },
 }
@@ -237,6 +261,26 @@ def _analyze_rules(
     if card.total_score < 80:
         actions.append(_make_action("add_ci_gate", "low_overall_score"))
 
+    # Rule 9: missing-tool patterns detected → install_capability
+    # One action per distinct capability_id; deduped across multiple patterns.
+    missing_caps = _detect_missing_capabilities(events, error_patterns, card.all_flags)
+    for cap_id, trigger in missing_caps.items():
+        suggested_cmd = f"agent-ready fix --capability {cap_id}"
+        actions.append(
+            RemediationAction(
+                action_type="install_capability",
+                label=f"Install missing capability: {cap_id}",
+                description=f"Detected '{trigger}' in trace. Run: {suggested_cmd}",
+                confidence=ACTION_TYPES["install_capability"]["confidence"],
+                safe_to_automate=ACTION_TYPES["install_capability"]["safe_to_automate"],
+                requires_approval=ACTION_TYPES["install_capability"][
+                    "requires_approval"
+                ],
+                triggered_by=trigger,
+                context={"capability_id": cap_id, "suggested_command": suggested_cmd},
+            )
+        )
+
     # Sort by confidence (high first), then by action type
     confidence_order = {"high": 0, "medium": 1, "low": 2}
     actions.sort(key=lambda a: (confidence_order.get(a.confidence, 9), a.action_type))
@@ -359,6 +403,49 @@ def _extract_tool_context(events: list[Event]) -> dict | None:
 
     tool_counts["total"] = total
     return tool_counts
+
+
+def _detect_missing_capabilities(
+    events: list[Event] | None,
+    error_patterns: list[str],
+    flags: list[FrictionFlag],
+) -> dict[str, str]:
+    """Scan trace for missing-tool patterns and return {capability_id: first_triggering_pattern}.
+
+    Sources scanned (in order):
+    1. error_patterns extracted from event error_type fields
+    2. raw event error_type fields (unlimited, unlike error_patterns[:3])
+    3. friction flag suggestions
+
+    Each capability_id appears at most once — multiple patterns mapping to
+    the same capability are deduped, keeping the first trigger.
+    """
+    seen: dict[str, str] = {}  # capability_id → triggering pattern
+
+    def _scan(text: str) -> None:
+        if seen is None:
+            return
+        for pattern, cap_id in _CAPABILITY_HINTS.items():
+            if cap_id in seen:
+                continue
+            if re.search(pattern, text, re.IGNORECASE):
+                seen[cap_id] = text
+
+    # Source 1: error patterns from _extract_failure_context
+    for p in error_patterns:
+        _scan(p)
+
+    # Source 2: raw event error_type fields (not capped at 3)
+    if events:
+        for e in events:
+            if e.error_type:
+                _scan(e.error_type)
+
+    # Source 3: friction flag suggestions
+    for f in flags:
+        _scan(f.suggestion)
+
+    return seen
 
 
 def _make_action(action_type: str, triggered_by: str) -> RemediationAction:

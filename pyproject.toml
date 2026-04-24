@@ -1,6 +1,6 @@
 [project]
 name = "trace-eval"
-version = "0.5.0"
+version = "0.6.0"
 description = "Deterministic-first CLI for evaluating AI agent traces"
 readme = "README.md"
 license = {text = "MIT"}
