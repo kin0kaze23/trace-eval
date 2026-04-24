@@ -171,8 +171,8 @@ class TestFormatLoopTextSuccess:
             "error": None,
         }
         text = format_loop_text(result)
-        assert "TOP 3 ISSUES:" in text
-        assert "reliability_errors" in text
+        assert "Issues found:" in text
+        assert "Review errors" in text
 
     def test_shows_safe_fixes_applied(self):
         card = _make_scorecard(total_score=30)

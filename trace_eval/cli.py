@@ -514,11 +514,11 @@ def main():
     sub = parser.add_subparsers(dest="command", required=False)
 
     # validate
-    p_validate = sub.add_parser("validate", help="Schema validation + field coverage + adapter capabilities")
+    p_validate = sub.add_parser("validate", help="Check if a trace file is valid and well-formed")
     p_validate.add_argument("trace", help="Path to trace file (.jsonl or .db)")
 
     # run
-    p_run = sub.add_parser("run", help="Full scorecard")
+    p_run = sub.add_parser("run", help="Score a specific trace file")
     p_run.add_argument("trace", help="Path to trace file")
     p_run.add_argument(
         "--format",
@@ -544,7 +544,7 @@ def main():
     )
 
     # compare
-    p_compare = sub.add_parser("compare", help="Delta between two traces")
+    p_compare = sub.add_parser("compare", help="Compare scores between two trace files")
     p_compare.add_argument("before", help="Path to before trace")
     p_compare.add_argument("after", help="Path to after trace")
     p_compare.add_argument(
@@ -556,7 +556,7 @@ def main():
     p_compare.add_argument("--summary", action="store_true", help="Concise before/after comparison")
 
     # ci
-    p_ci = sub.add_parser("ci", help="CI gate -- exits non-zero below threshold")
+    p_ci = sub.add_parser("ci", help="Quality gate for CI/CD pipelines (fails if score too low)")
     p_ci.add_argument("trace", help="Path to trace file")
     p_ci.add_argument("--min-score", type=float, default=80, help="Minimum total score (default: 80)")
     p_ci.add_argument(
@@ -579,7 +579,7 @@ def main():
     )
 
     # convert
-    p_convert = sub.add_parser("convert", help="Convert non-canonical traces to canonical JSONL")
+    p_convert = sub.add_parser("convert", help="Convert agent traces to standard format")
     p_convert.add_argument("input", help="Path to trace file to convert")
     p_convert.add_argument(
         "format_type",
@@ -591,7 +591,7 @@ def main():
     p_convert.add_argument("-o", "--output", help="Output path (default: <input>_canonical.jsonl)")
 
     # locate
-    p_locate = sub.add_parser("locate", help="Find recent agent trace files")
+    p_locate = sub.add_parser("locate", help="Find recent agent session files")
     p_locate.add_argument(
         "agent_type",
         nargs="?",
@@ -603,7 +603,7 @@ def main():
     p_locate.add_argument("--hours", type=int, default=48, help="Search window in hours (default: 48)")
 
     # doctor
-    p_doctor = sub.add_parser("doctor", help="Diagnose installation, trace availability, and readiness")
+    p_doctor = sub.add_parser("doctor", help="Check your setup — agents, traces, and readiness")
     p_doctor.add_argument(
         "--format",
         choices=["text", "json"],
@@ -612,7 +612,7 @@ def main():
     )
 
     # remediate
-    p_remediate = sub.add_parser("remediate", help="Get recommended actions to improve agent run quality")
+    p_remediate = sub.add_parser("remediate", help="Get actionable recommendations to improve agent quality")
     p_remediate.add_argument("trace", help="Path to trace file")
     p_remediate.add_argument("--profile", choices=list(PROFILES.keys()), default=None, help="Scoring profile")
     p_remediate.add_argument("--apply-safe", action="store_true", help="Apply safe fixes automatically")
@@ -623,7 +623,7 @@ def main():
     )
 
     # loop
-    p_loop = sub.add_parser("loop", help="Full loop: locate -> convert -> score -> remediate")
+    p_loop = sub.add_parser("loop", help="Full evaluation: find, score, and recommend fixes for latest session")
     p_loop.add_argument(
         "agent_type",
         nargs="?",
