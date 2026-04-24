@@ -1,24 +1,45 @@
 import json
+
 import pytest
-from pathlib import Path
-from trace_eval.loader import load_trace, load_trace_with_report, detect_adapter
+
 from trace_eval.adapters.generic_jsonl import GenericJsonlAdapter
-from trace_eval.schema import EventType, Status
+from trace_eval.loader import detect_adapter, load_trace, load_trace_with_report
+from trace_eval.schema import EventType
 
 
 @pytest.fixture
 def sample_jsonl(tmp_path):
     p = tmp_path / "trace.jsonl"
     lines = [
-        {"event_index": 0, "actor": "user", "event_type": "message",
-         "timestamp": "2026-04-15T10:00:00Z", "status": "success",
-         "trace_id": "abc-123", "task_id": "t-1", "session_id": "s-1"},
-        {"event_index": 1, "actor": "assistant", "event_type": "llm_call",
-         "timestamp": "2026-04-15T10:00:05Z", "status": "success",
-         "trace_id": "abc-123", "tokens_in": 1200, "tokens_out": 350},
-        {"event_index": 2, "actor": "tool", "event_type": "tool_call",
-         "timestamp": "2026-04-15T10:00:06Z", "status": "success",
-         "tool_name": "grep", "tool_args": {"pattern": "auth"}},
+        {
+            "event_index": 0,
+            "actor": "user",
+            "event_type": "message",
+            "timestamp": "2026-04-15T10:00:00Z",
+            "status": "success",
+            "trace_id": "abc-123",
+            "task_id": "t-1",
+            "session_id": "s-1",
+        },
+        {
+            "event_index": 1,
+            "actor": "assistant",
+            "event_type": "llm_call",
+            "timestamp": "2026-04-15T10:00:05Z",
+            "status": "success",
+            "trace_id": "abc-123",
+            "tokens_in": 1200,
+            "tokens_out": 350,
+        },
+        {
+            "event_index": 2,
+            "actor": "tool",
+            "event_type": "tool_call",
+            "timestamp": "2026-04-15T10:00:06Z",
+            "status": "success",
+            "tool_name": "grep",
+            "tool_args": {"pattern": "auth"},
+        },
     ]
     p.write_text("\n".join(json.dumps(l) for l in lines) + "\n")
     return p

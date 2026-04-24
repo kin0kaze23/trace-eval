@@ -5,9 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from trace_eval.schema import Trace
 from trace_eval.adapters.generic_jsonl import GenericJsonlAdapter
 from trace_eval.adapters.hermes import HermesAdapter
+from trace_eval.schema import Trace
 
 
 def detect_adapter(path: Path):

@@ -1,8 +1,8 @@
 import json
-import pytest
-from trace_eval.report import format_text, format_json, format_summary, compute_rating, ScoreRating
-from trace_eval.scoring import Scorecard
+
+from trace_eval.report import ScoreRating, compute_rating, format_json, format_summary, format_text
 from trace_eval.schema import FrictionFlag
+from trace_eval.scoring import Scorecard
 
 
 def _make_card():
@@ -16,13 +16,18 @@ def _make_card():
             "context": 75.0,
         },
         dimension_confidence={
-            "reliability": "high", "efficiency": "medium",
-            "retrieval": "high", "tool_discipline": "high", "context": "low",
+            "reliability": "high",
+            "efficiency": "medium",
+            "retrieval": "high",
+            "tool_discipline": "high",
+            "context": "low",
         },
         all_flags=[
             FrictionFlag(
-                id="reliability_errors", severity="medium",
-                dimension="reliability", event_index=3,
+                id="reliability_errors",
+                severity="medium",
+                dimension="reliability",
+                event_index=3,
                 suggestion="Review errors at event indices [3, 5]",
             ),
         ],
@@ -59,12 +64,16 @@ def test_json_format_is_valid():
 def test_json_has_required_fields():
     """JSON output must always include spec-mandated fields."""
     from trace_eval.remediation import RemediationAction
+
     card = _make_card()
     actions = [
         RemediationAction(
-            action_type="fix_errors", label="Fix errors",
-            description="Fix.", confidence="high",
-            safe_to_automate=False, requires_approval=True,
+            action_type="fix_errors",
+            label="Fix errors",
+            description="Fix.",
+            confidence="high",
+            safe_to_automate=False,
+            requires_approval=True,
             triggered_by="test",
         ),
     ]
@@ -97,23 +106,32 @@ def _make_bad_card():
             "context": None,
         },
         dimension_confidence={
-            "reliability": "high", "efficiency": "high",
-            "retrieval": "low", "tool_discipline": "high", "context": "low",
+            "reliability": "high",
+            "efficiency": "high",
+            "retrieval": "low",
+            "tool_discipline": "high",
+            "context": "low",
         },
         all_flags=[
             FrictionFlag(
-                id="reliability_errors", severity="medium",
-                dimension="reliability", event_index=None,
+                id="reliability_errors",
+                severity="medium",
+                dimension="reliability",
+                event_index=None,
                 suggestion="Review 90 error(s)",
             ),
             FrictionFlag(
-                id="efficiency_high_tokens", severity="medium",
-                dimension="efficiency", event_index=None,
+                id="efficiency_high_tokens",
+                severity="medium",
+                dimension="efficiency",
+                event_index=None,
                 suggestion="High token usage detected",
             ),
             FrictionFlag(
-                id="tool_redundant", severity="low",
-                dimension="tool_discipline", event_index=3,
+                id="tool_redundant",
+                severity="low",
+                dimension="tool_discipline",
+                event_index=3,
                 suggestion="1 redundant tool call",
             ),
         ],
@@ -137,8 +155,11 @@ def _make_good_card():
             "context": 100.0,
         },
         dimension_confidence={
-            "reliability": "high", "efficiency": "medium",
-            "retrieval": "high", "tool_discipline": "high", "context": "high",
+            "reliability": "high",
+            "efficiency": "medium",
+            "retrieval": "high",
+            "tool_discipline": "high",
+            "context": "high",
         },
         all_flags=[],
         scorable_dimensions=["reliability", "efficiency", "retrieval", "tool_discipline", "context"],
@@ -220,6 +241,7 @@ def test_json_has_top_actions():
     """JSON output must include top_actions — up to 3 actions sorted deterministically."""
     card = _make_card()
     from trace_eval.remediation import analyze
+
     actions = analyze(card)
     data = json.loads(format_json(card, actions=actions))
     assert "top_actions" in data

@@ -1,4 +1,3 @@
-import pytest
 from trace_eval.judges.tool_discipline import judge_tool_discipline
 from trace_eval.schema import Event
 
@@ -53,9 +52,7 @@ def test_tool_timeout_penalty():
 
 
 def test_floor_at_zero():
-    events = [
-        _make_event(i, tool_name="grep", status="error") for i in range(5)
-    ] + [
+    events = [_make_event(i, tool_name="grep", status="error") for i in range(5)] + [
         _make_event(5, tool_name="grep", status="success"),
     ]
     result = judge_tool_discipline(events)

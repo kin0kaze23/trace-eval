@@ -11,8 +11,8 @@ import sys
 from pathlib import Path
 
 from trace_eval import __version__
-from trace_eval.locate import SEARCH_PATHS, locate
 from trace_eval.convert import _detect_format
+from trace_eval.locate import SEARCH_PATHS, locate
 
 
 def _python_version() -> str:
@@ -160,10 +160,7 @@ def _build_recommendation(result: dict) -> str:
     agents_without_dir = [a for a in result["agents"] if a["status"] == "not_found"]
 
     if agents_with_dir:
-        return (
-            "Agent directories found but no recent traces. "
-            "Try: trace-eval loop --hours 168 (search wider window)"
-        )
+        return "Agent directories found but no recent traces. Try: trace-eval loop --hours 168 (search wider window)"
 
     if agents_without_dir:
         missing = ", ".join(a["agent"] for a in agents_without_dir)
@@ -201,21 +198,13 @@ def format_doctor_text(result: dict) -> str:
         # Show recent traces if available
         if agent.get("recent_traces"):
             for trace in agent["recent_traces"]:
-                lines.append(
-                    f"       {trace['age']:>10s}  {_human_size(trace['size']):>8s}  {trace['project']}"
-                )
+                lines.append(f"       {trace['age']:>10s}  {_human_size(trace['size']):>8s}  {trace['project']}")
     lines.append("")
 
     # Sample trace validation
     sample = result["sample_trace"]
     lines.append("SAMPLE TRACE:")
-    sample_icon = (
-        "✓"
-        if sample["status"] == "ok"
-        else "?"
-        if sample["status"] == "warning"
-        else "X"
-    )
+    sample_icon = "✓" if sample["status"] == "ok" else "?" if sample["status"] == "warning" else "X"
     lines.append(f"  {sample_icon} {sample['message']}")
     if sample.get("path"):
         lines.append(f"    Path: {sample['path']}")
@@ -231,9 +220,7 @@ def format_doctor_text(result: dict) -> str:
     # Contextual help based on situation
     if result["total_traces"] == 0:
         lines.append("TROUBLESHOOTING:")
-        has_any_dir = any(
-            a["status"] in ("found", "not_found") for a in result["agents"]
-        )
+        has_any_dir = any(a["status"] in ("found", "not_found") for a in result["agents"])
         if has_any_dir:
             lines.append("  • Agent directories exist but no recent traces found")
             lines.append("  • Try a wider search: trace-eval loop --hours 168")

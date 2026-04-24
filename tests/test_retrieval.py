@@ -1,4 +1,3 @@
-import pytest
 from trace_eval.judges.retrieval import judge_retrieval
 from trace_eval.schema import Event
 
@@ -17,8 +16,7 @@ def _make_event(index, **extra):
 
 def test_perfect_retrieval():
     events = [
-        _make_event(0, retrieval_entrypoint="canonical_read",
-                     retrieval_steps=["step1", "step2"]),
+        _make_event(0, retrieval_entrypoint="canonical_read", retrieval_steps=["step1", "step2"]),
     ]
     result = judge_retrieval(events)
     assert result.score == 100.0
@@ -33,9 +31,7 @@ def test_no_entrypoint_penalty():
 
 def test_deprecated_file_penalty():
     events = [
-        _make_event(0, retrieval_entrypoint="canonical_read",
-                     deprecated_file_touched=True,
-                     retrieval_steps=["step1"]),
+        _make_event(0, retrieval_entrypoint="canonical_read", deprecated_file_touched=True, retrieval_steps=["step1"]),
     ]
     result = judge_retrieval(events)
     # 100 - 30 = 70
@@ -44,9 +40,7 @@ def test_deprecated_file_penalty():
 
 def test_fallback_search_penalty():
     events = [
-        _make_event(0, retrieval_entrypoint="canonical_read",
-                     fallback_search_used=True,
-                     retrieval_steps=["step1"]),
+        _make_event(0, retrieval_entrypoint="canonical_read", fallback_search_used=True, retrieval_steps=["step1"]),
     ]
     result = judge_retrieval(events)
     # 100 - 20 = 80
@@ -55,8 +49,7 @@ def test_fallback_search_penalty():
 
 def test_no_retrieval_steps_penalty():
     events = [
-        _make_event(0, retrieval_entrypoint="canonical_read",
-                     retrieval_steps=[]),
+        _make_event(0, retrieval_entrypoint="canonical_read", retrieval_steps=[]),
     ]
     result = judge_retrieval(events)
     # 100 - 10 = 90
@@ -65,8 +58,7 @@ def test_no_retrieval_steps_penalty():
 
 def test_combined_penalties():
     events = [
-        _make_event(0, deprecated_file_touched=True,
-                     fallback_search_used=True),
+        _make_event(0, deprecated_file_touched=True, fallback_search_used=True),
     ]
     result = judge_retrieval(events)
     # 100 - 40 (no entrypoint) - 30 (deprecated) - 20 (fallback) - 10 (no steps) = 0
@@ -75,8 +67,7 @@ def test_combined_penalties():
 
 def test_bonus_for_multiple_steps():
     events = [
-        _make_event(0, retrieval_entrypoint="canonical_read",
-                     retrieval_steps=["step1", "step2"]),
+        _make_event(0, retrieval_entrypoint="canonical_read", retrieval_steps=["step1", "step2"]),
     ]
     result = judge_retrieval(events)
     # 100 + 5 capped at 100

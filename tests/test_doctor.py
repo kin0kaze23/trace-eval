@@ -1,12 +1,12 @@
 """Tests for doctor command."""
 
 from trace_eval.doctor import (
-    run_doctor,
-    format_doctor_text,
-    format_doctor_json,
+    _agent_status_icon,
     _build_recommendation,
     _human_size,
-    _agent_status_icon,
+    format_doctor_json,
+    format_doctor_text,
+    run_doctor,
 )
 
 

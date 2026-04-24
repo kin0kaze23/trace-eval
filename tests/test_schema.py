@@ -1,15 +1,29 @@
-import pytest
 from trace_eval.schema import (
-    EventType, Status, FrictionFlag, JudgeResult, Event, Trace, FieldCoverage
+    Event,
+    EventType,
+    FieldCoverage,
+    FrictionFlag,
+    JudgeResult,
+    Status,
+    Trace,
 )
 
 
 def test_event_type_enum_values():
     expected = [
-        "message", "llm_call", "tool_call", "tool_result",
-        "vault_read", "memory_read", "memory_write", "search_fallback",
-        "context_warning", "context_compress", "system",
-        "session_start", "session_end",
+        "message",
+        "llm_call",
+        "tool_call",
+        "tool_result",
+        "vault_read",
+        "memory_read",
+        "memory_write",
+        "search_fallback",
+        "context_warning",
+        "context_compress",
+        "system",
+        "session_start",
+        "session_end",
     ]
     assert sorted(e.value for e in EventType) == sorted(expected)
 
@@ -98,11 +112,18 @@ def test_event_from_dict_unknown_event_type():
 
 def test_trace_from_events():
     events = [
-        Event.from_dict({
-            "event_index": 0, "actor": "user", "event_type": "message",
-            "timestamp": "2026-04-15T10:00:00Z", "status": "success",
-            "trace_id": "abc-123", "task_id": "t-1", "session_id": "s-1",
-        }),
+        Event.from_dict(
+            {
+                "event_index": 0,
+                "actor": "user",
+                "event_type": "message",
+                "timestamp": "2026-04-15T10:00:00Z",
+                "status": "success",
+                "trace_id": "abc-123",
+                "task_id": "t-1",
+                "session_id": "s-1",
+            }
+        ),
     ]
     trace = Trace.from_events(events)
     assert trace.trace_id == "abc-123"
@@ -111,16 +132,28 @@ def test_trace_from_events():
 
 def test_field_coverage_compute():
     events = [
-        Event.from_dict({
-            "event_index": 0, "actor": "user", "event_type": "message",
-            "timestamp": "2026-04-15T10:00:00Z", "status": "success",
-            "tokens_in": 100, "latency_ms": 500,
-        }),
-        Event.from_dict({
-            "event_index": 1, "actor": "assistant", "event_type": "llm_call",
-            "timestamp": "2026-04-15T10:00:05Z", "status": "success",
-            "tokens_in": 200, "tokens_out": 50,
-        }),
+        Event.from_dict(
+            {
+                "event_index": 0,
+                "actor": "user",
+                "event_type": "message",
+                "timestamp": "2026-04-15T10:00:00Z",
+                "status": "success",
+                "tokens_in": 100,
+                "latency_ms": 500,
+            }
+        ),
+        Event.from_dict(
+            {
+                "event_index": 1,
+                "actor": "assistant",
+                "event_type": "llm_call",
+                "timestamp": "2026-04-15T10:00:05Z",
+                "status": "success",
+                "tokens_in": 200,
+                "tokens_out": 50,
+            }
+        ),
     ]
     coverage = FieldCoverage.compute(events)
     assert coverage.fields["tokens_in"].present == 2

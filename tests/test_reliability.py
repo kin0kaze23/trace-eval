@@ -1,16 +1,17 @@
-import pytest
 from trace_eval.judges.reliability import judge_reliability
-from trace_eval.schema import Event, EventType, Status
+from trace_eval.schema import Event
 
 
 def _make_event(index, status="success", event_type="message"):
-    return Event.from_dict({
-        "event_index": index,
-        "actor": "assistant",
-        "event_type": event_type,
-        "timestamp": "2026-04-15T10:00:00Z",
-        "status": status,
-    })
+    return Event.from_dict(
+        {
+            "event_index": index,
+            "actor": "assistant",
+            "event_type": event_type,
+            "timestamp": "2026-04-15T10:00:00Z",
+            "status": status,
+        }
+    )
 
 
 def test_perfect_reliability():
@@ -73,9 +74,7 @@ def test_partial_terminal():
 
 
 def test_floor_at_zero():
-    events = [
-        _make_event(i, status="error") for i in range(7)
-    ] + [
+    events = [_make_event(i, status="error") for i in range(7)] + [
         _make_event(7, event_type="session_end", status="error"),
     ]
     result = judge_reliability(events)

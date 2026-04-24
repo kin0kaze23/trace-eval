@@ -1,4 +1,3 @@
-import pytest
 from trace_eval.judges.efficiency import judge_efficiency
 from trace_eval.schema import Event
 
@@ -23,9 +22,7 @@ def test_low_usage_perfect_score():
 
 def test_high_tokens_penalty():
     # 25000 tokens → token_sub = max(0, 100 - 25000/500) = 50
-    events = [
-        _make_event(i, tokens_in=5000, tokens_out=0) for i in range(5)
-    ]
+    events = [_make_event(i, tokens_in=5000, tokens_out=0) for i in range(5)]
     result = judge_efficiency(events)
     # total_tokens = 25000, token_sub = 50
     # cost_sub = 100 (no cost), tool_density_sub = 100 (no tool calls)

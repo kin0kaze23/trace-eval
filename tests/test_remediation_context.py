@@ -1,13 +1,11 @@
 """Tests for remediation context enrichment."""
 
-from trace_eval.remediation import analyze_with_context, RemediationAction
+from trace_eval.remediation import analyze_with_context
+from trace_eval.schema import Event, EventType, FrictionFlag, Status
 from trace_eval.scoring import Scorecard
-from trace_eval.schema import Event, EventType, Status, FrictionFlag
 
 
-def _make_card(
-    flags=None, dim_scores=None, unscorable=None, profile="default", total_score=50
-):
+def _make_card(flags=None, dim_scores=None, unscorable=None, profile="default", total_score=50):
     return Scorecard(
         total_score=total_score,
         dimension_scores=dim_scores
@@ -133,9 +131,7 @@ def test_enriched_token_context():
     )
 
     actions = analyze_with_context(card, events)
-    token_action = next(
-        (a for a in actions if a.action_type == "reduce_prompt_size"), None
-    )
+    token_action = next((a for a in actions if a.action_type == "reduce_prompt_size"), None)
     assert token_action is not None
     assert "140,000" in token_action.label or "140000" in token_action.label
 
@@ -170,9 +166,7 @@ def test_enriched_tool_call_context():
     )
 
     actions = analyze_with_context(card, events)
-    tool_action = next(
-        (a for a in actions if a.action_type == "reduce_tool_calls"), None
-    )
+    tool_action = next((a for a in actions if a.action_type == "reduce_tool_calls"), None)
     assert tool_action is not None
     assert "11" in tool_action.label or "11" in tool_action.label
 
@@ -264,7 +258,4 @@ def test_error_patterns_included():
     error_action = next((a for a in actions if a.action_type == "fix_errors"), None)
     assert error_action is not None
     # Should reference error patterns
-    assert (
-        "exit_code" in error_action.description.lower()
-        or "file_not_found" in error_action.description.lower()
-    )
+    assert "exit_code" in error_action.description.lower() or "file_not_found" in error_action.description.lower()

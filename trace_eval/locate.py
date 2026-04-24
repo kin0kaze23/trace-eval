@@ -57,16 +57,23 @@ def _is_valid_trace(path: Path, agent_type: str) -> bool:
         data = json.loads(first_line)
         if agent_type == "claude-code":
             return "type" in data and data["type"] in (
-                "permission-mode", "user", "assistant", "tool_result",
+                "permission-mode",
+                "user",
+                "assistant",
+                "tool_result",
                 "file-history-snapshot",
             )
         elif agent_type == "cursor":
             return "role" in data and data["role"] in (
-                "user", "assistant", "toolResult",
+                "user",
+                "assistant",
+                "toolResult",
             )
         elif agent_type == "openclaw":
             return "type" in data and data["type"] in (
-                "session", "message", "model_change",
+                "session",
+                "message",
+                "model_change",
             )
         return True
     except (json.JSONDecodeError, OSError):
@@ -95,11 +102,7 @@ def locate(
     results: list[TraceLocation] = []
     cutoff = time.time() - (hours * 3600)
 
-    agents_to_search = (
-        ["claude-code", "cursor", "openclaw"]
-        if agent_type == "all"
-        else [agent_type]
-    )
+    agents_to_search = ["claude-code", "cursor", "openclaw"] if agent_type == "all" else [agent_type]
 
     for agent in agents_to_search:
         base_dirs = SEARCH_PATHS.get(agent, [])
@@ -122,13 +125,15 @@ def locate(
                 rel = path.relative_to(base_dir)
                 project_name = rel.parts[0] if rel.parts else str(path.parent.name)
 
-                results.append(TraceLocation(
-                    path=str(path),
-                    agent_type=agent,
-                    size_bytes=stat.st_size,
-                    modified_time=_time_ago(stat.st_mtime),
-                    project_name=project_name,
-                ))
+                results.append(
+                    TraceLocation(
+                        path=str(path),
+                        agent_type=agent,
+                        size_bytes=stat.st_size,
+                        modified_time=_time_ago(stat.st_mtime),
+                        project_name=project_name,
+                    )
+                )
 
     results_with_mtime = []
     for r in results:

@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from datetime import UTC
 from pathlib import Path
 from typing import Any
 
@@ -65,11 +66,11 @@ def _detect_tool_error(content: str) -> bool:
 
 # Map Hermes end_reason to a terminal event status
 _TERMINAL_MAP: dict[str | None, Status | None] = {
-    "cli_close": None,       # user closed — not a failure, just incomplete
-    "session_reset": None,   # session was reset — not a failure
-    "compression": None,     # hit context compression limit
+    "cli_close": None,  # user closed — not a failure, just incomplete
+    "session_reset": None,  # session was reset — not a failure
+    "compression": None,  # hit context compression limit
     "cron_complete": Status.success,
-    None: None,              # unknown
+    None: None,  # unknown
 }
 
 
@@ -100,9 +101,7 @@ class HermesAdapter:
             return Trace(events=[])
 
         # --- Read all messages ---
-        c.execute(
-            "SELECT * FROM messages ORDER BY session_id, timestamp"
-        )
+        c.execute("SELECT * FROM messages ORDER BY session_id, timestamp")
         messages = [dict(row) for row in c.fetchall()]
 
         conn.close()
@@ -115,8 +114,8 @@ class HermesAdapter:
         # 2. Per-message token_count in the Hermes messages table is always NULL
         #
         # We report these in the capability report for transparency.
-        total_input_tokens = sum(s.get("input_tokens") or 0 for s in sessions)
-        total_output_tokens = sum(s.get("output_tokens") or 0 for s in sessions)
+        total_input_tokens = sum(s.get("input_tokens") or 0 for s in sessions)  # noqa: F841
+        total_output_tokens = sum(s.get("output_tokens") or 0 for s in sessions)  # noqa: F841
         last_end_reason = sessions[-1].get("end_reason")
 
         # --- Build events from messages ---
@@ -136,8 +135,9 @@ class HermesAdapter:
 
             # Convert Unix timestamp to ISO string
             if timestamp_raw is not None:
-                from datetime import datetime, timezone
-                ts = datetime.fromtimestamp(float(timestamp_raw), tz=timezone.utc).isoformat()
+                from datetime import datetime
+
+                ts = datetime.fromtimestamp(float(timestamp_raw), tz=UTC).isoformat()
             else:
                 ts = ""
 
@@ -202,19 +202,21 @@ class HermesAdapter:
                 except (json.JSONDecodeError, TypeError):
                     pass
 
-            events.append(Event(
-                event_index=event_index,
-                actor=actor,
-                event_type=event_type,
-                timestamp=ts,
-                status=status,
-                session_id=session_id,
-                tool_name=resolved_tool_name,
-                tool_args=tool_args,
-                tokens_in=token_count if role == "assistant" else None,
-                tokens_out=token_count if role == "assistant" else None,
-                metadata=metadata if metadata else None,
-            ))
+            events.append(
+                Event(
+                    event_index=event_index,
+                    actor=actor,
+                    event_type=event_type,
+                    timestamp=ts,
+                    status=status,
+                    session_id=session_id,
+                    tool_name=resolved_tool_name,
+                    tool_args=tool_args,
+                    tokens_in=token_count if role == "assistant" else None,
+                    tokens_out=token_count if role == "assistant" else None,
+                    metadata=metadata if metadata else None,
+                )
+            )
             event_index += 1
 
         # Set terminal status on last event if end_reason is meaningful

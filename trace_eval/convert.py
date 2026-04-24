@@ -12,18 +12,12 @@ Usage:
 from __future__ import annotations
 
 import json
-import sqlite3
-import sys
-from collections import Counter
 from pathlib import Path
-from typing import Any
-
-from trace_eval.schema import Event, EventType, Status
-
 
 # ---------------------------------------------------------------------------
 # Claude Code converter
 # ---------------------------------------------------------------------------
+
 
 def _cc_detect_error(text: str) -> bool:
     """Detect errors in Claude Code tool result content."""
@@ -43,9 +37,16 @@ def _cc_detect_error(text: str) -> bool:
                 pass
     # Command-not-found patterns
     error_patterns = [
-        "command not found", "no such file or directory", "not found",
-        "permission denied", "is a directory", "illegal operation",
-        "exit code 1", "exit code 2", "exit code 127", "exit code 128",
+        "command not found",
+        "no such file or directory",
+        "not found",
+        "permission denied",
+        "is a directory",
+        "illegal operation",
+        "exit code 1",
+        "exit code 2",
+        "exit code 127",
+        "exit code 128",
     ]
     for pat in error_patterns:
         if pat.lower() in text.lower():
@@ -76,8 +77,13 @@ def convert_claude_code(input_path: Path) -> list[dict]:
 
         # Skip metadata events
         if etype in (
-            "permission-mode", "file-history-snapshot", "attachment",
-            "custom-title", "agent-name", "last-prompt", "queue-operation",
+            "permission-mode",
+            "file-history-snapshot",
+            "attachment",
+            "custom-title",
+            "agent-name",
+            "last-prompt",
+            "queue-operation",
         ):
             continue
 
@@ -91,14 +97,8 @@ def convert_claude_code(input_path: Path) -> list[dict]:
 
             # Check if this is a tool_result (content is a list with tool_result type)
             if isinstance(content, list):
-                has_tool_result = any(
-                    isinstance(c, dict) and c.get("type") == "tool_result"
-                    for c in content
-                )
-                has_text = any(
-                    isinstance(c, dict) and c.get("type") == "text"
-                    for c in content
-                )
+                has_tool_result = any(isinstance(c, dict) and c.get("type") == "tool_result" for c in content)
+                has_text = any(isinstance(c, dict) and c.get("type") == "text" for c in content)
 
                 if has_tool_result:
                     # This is a tool result response
@@ -110,7 +110,8 @@ def convert_claude_code(input_path: Path) -> list[dict]:
                                 tool_result_text = inner_content
                             elif isinstance(inner_content, list):
                                 tool_result_text = "\n".join(
-                                    c.get("text", "") for c in inner_content
+                                    c.get("text", "")
+                                    for c in inner_content
                                     if isinstance(c, dict) and c.get("type") == "text"
                                 )
 
@@ -127,48 +128,55 @@ def convert_claude_code(input_path: Path) -> list[dict]:
                                 except (json.JSONDecodeError, TypeError):
                                     pass
 
-                            canonical.append({
-                                "event_index": idx,
-                                "actor": "tool",
-                                "event_type": "tool_result",
-                                "timestamp": e.get("timestamp", ""),
-                                "status": status,
-                                "session_id": session_id,
-                                "tool_args": tool_args,
-                            })
+                            canonical.append(
+                                {
+                                    "event_index": idx,
+                                    "actor": "tool",
+                                    "event_type": "tool_result",
+                                    "timestamp": e.get("timestamp", ""),
+                                    "status": status,
+                                    "session_id": session_id,
+                                    "tool_args": tool_args,
+                                }
+                            )
                             idx += 1
 
                 elif has_text:
                     # Regular user message with text content
                     text_parts = [
-                        c.get("text", "") for c in content
+                        c.get("text", "")
+                        for c in content
                         if isinstance(c, dict) and c.get("type") == "text" and c.get("text")
                     ]
                     if text_parts:
-                        canonical.append({
-                            "event_index": idx,
-                            "actor": "user",
-                            "event_type": "message",
-                            "timestamp": e.get("timestamp", ""),
-                            "status": None,
-                            "session_id": session_id,
-                            "schema_version": "v1",
-                            "trace_id": trace_id,
-                        })
+                        canonical.append(
+                            {
+                                "event_index": idx,
+                                "actor": "user",
+                                "event_type": "message",
+                                "timestamp": e.get("timestamp", ""),
+                                "status": None,
+                                "session_id": session_id,
+                                "schema_version": "v1",
+                                "trace_id": trace_id,
+                            }
+                        )
                         idx += 1
                 # If neither tool_result nor text, skip (could be just metadata)
 
             elif isinstance(content, str) and len(content) > 0:
-                canonical.append({
-                    "event_index": idx,
-                    "actor": "user",
-                    "event_type": "message",
-                    "timestamp": e.get("timestamp", ""),
-                    "status": None,
-                    "session_id": session_id,
-                    "schema_version": "v1",
-                    "trace_id": trace_id,
-                })
+                canonical.append(
+                    {
+                        "event_index": idx,
+                        "actor": "user",
+                        "event_type": "message",
+                        "timestamp": e.get("timestamp", ""),
+                        "status": None,
+                        "session_id": session_id,
+                        "schema_version": "v1",
+                        "trace_id": trace_id,
+                    }
+                )
                 idx += 1
             continue
 
@@ -183,16 +191,18 @@ def convert_claude_code(input_path: Path) -> list[dict]:
                 if isinstance(block, dict) and block.get("type") == "tool_use":
                     tool_name = block.get("name", "unknown")
                     tool_input = block.get("input", {})
-                    canonical.append({
-                        "event_index": idx,
-                        "actor": "assistant",
-                        "event_type": "tool_call",
-                        "timestamp": e.get("timestamp", ""),
-                        "status": None,
-                        "session_id": session_id,
-                        "tool_name": tool_name,
-                        "tool_args": tool_input if isinstance(tool_input, dict) else None,
-                    })
+                    canonical.append(
+                        {
+                            "event_index": idx,
+                            "actor": "assistant",
+                            "event_type": "tool_call",
+                            "timestamp": e.get("timestamp", ""),
+                            "status": None,
+                            "session_id": session_id,
+                            "tool_name": tool_name,
+                            "tool_args": tool_input if isinstance(tool_input, dict) else None,
+                        }
+                    )
                     idx += 1
 
             # Emit LLM call event
@@ -210,16 +220,18 @@ def convert_claude_code(input_path: Path) -> list[dict]:
                 if to is not None and to > 0:
                     tokens_out = int(to)
 
-            canonical.append({
-                "event_index": idx,
-                "actor": "assistant",
-                "event_type": "llm_call",
-                "timestamp": e.get("timestamp", ""),
-                "status": status,
-                "session_id": session_id,
-                "tokens_in": tokens_in,
-                "tokens_out": tokens_out,
-            })
+            canonical.append(
+                {
+                    "event_index": idx,
+                    "actor": "assistant",
+                    "event_type": "llm_call",
+                    "timestamp": e.get("timestamp", ""),
+                    "status": status,
+                    "session_id": session_id,
+                    "tokens_in": tokens_in,
+                    "tokens_out": tokens_out,
+                }
+            )
             idx += 1
             continue
 
@@ -257,16 +269,18 @@ def convert_claude_code(input_path: Path) -> list[dict]:
                 except (json.JSONDecodeError, TypeError):
                     pass
 
-            canonical.append({
-                "event_index": idx,
-                "actor": "tool",
-                "event_type": "tool_result",
-                "timestamp": e.get("timestamp", ""),
-                "status": status,
-                "session_id": session_id,
-                "tool_name": tool_name,
-                "tool_args": tool_args,
-            })
+            canonical.append(
+                {
+                    "event_index": idx,
+                    "actor": "tool",
+                    "event_type": "tool_result",
+                    "timestamp": e.get("timestamp", ""),
+                    "status": status,
+                    "session_id": session_id,
+                    "tool_name": tool_name,
+                    "tool_args": tool_args,
+                }
+            )
             idx += 1
             continue
 
@@ -276,6 +290,7 @@ def convert_claude_code(input_path: Path) -> list[dict]:
 # ---------------------------------------------------------------------------
 # OpenClaw converter
 # ---------------------------------------------------------------------------
+
 
 def convert_openclaw(input_path: Path) -> list[dict]:
     """Convert an OpenClaw session JSONL to canonical events."""
@@ -299,17 +314,19 @@ def convert_openclaw(input_path: Path) -> list[dict]:
         etype = e.get("type", "")
 
         if etype == "session":
-            canonical.append({
-                "event_index": idx,
-                "actor": "system",
-                "event_type": "session_start",
-                "timestamp": e.get("timestamp", ""),
-                "status": None,
-                "session_id": session_id,
-                "schema_version": "v1",
-                "trace_id": trace_id,
-                "cwd": cwd,
-            })
+            canonical.append(
+                {
+                    "event_index": idx,
+                    "actor": "system",
+                    "event_type": "session_start",
+                    "timestamp": e.get("timestamp", ""),
+                    "status": None,
+                    "session_id": session_id,
+                    "schema_version": "v1",
+                    "trace_id": trace_id,
+                    "cwd": cwd,
+                }
+            )
             idx += 1
             continue
 
@@ -336,14 +353,16 @@ def convert_openclaw(input_path: Path) -> list[dict]:
                     pass  # Skip thinking blocks
 
             if role == "user":
-                canonical.append({
-                    "event_index": idx,
-                    "actor": "user",
-                    "event_type": "message",
-                    "timestamp": e.get("timestamp", ""),
-                    "status": None,
-                    "session_id": session_id,
-                })
+                canonical.append(
+                    {
+                        "event_index": idx,
+                        "actor": "user",
+                        "event_type": "message",
+                        "timestamp": e.get("timestamp", ""),
+                        "status": None,
+                        "session_id": session_id,
+                    }
+                )
                 idx += 1
 
             elif role == "assistant":
@@ -351,16 +370,18 @@ def convert_openclaw(input_path: Path) -> list[dict]:
                 for tc in tool_calls:
                     tool_name = tc.get("name", "unknown")
                     tool_args = tc.get("arguments", {})
-                    canonical.append({
-                        "event_index": idx,
-                        "actor": "assistant",
-                        "event_type": "tool_call",
-                        "timestamp": e.get("timestamp", ""),
-                        "status": None,
-                        "session_id": session_id,
-                        "tool_name": tool_name,
-                        "tool_args": tool_args if isinstance(tool_args, dict) else None,
-                    })
+                    canonical.append(
+                        {
+                            "event_index": idx,
+                            "actor": "assistant",
+                            "event_type": "tool_call",
+                            "timestamp": e.get("timestamp", ""),
+                            "status": None,
+                            "session_id": session_id,
+                            "tool_name": tool_name,
+                            "tool_args": tool_args if isinstance(tool_args, dict) else None,
+                        }
+                    )
                     idx += 1
 
                 # Emit LLM call event
@@ -378,16 +399,18 @@ def convert_openclaw(input_path: Path) -> list[dict]:
                     if to and to > 0:
                         tokens_out = int(to)
 
-                canonical.append({
-                    "event_index": idx,
-                    "actor": "assistant",
-                    "event_type": "llm_call",
-                    "timestamp": e.get("timestamp", ""),
-                    "status": status,
-                    "session_id": session_id,
-                    "tokens_in": tokens_in,
-                    "tokens_out": tokens_out,
-                })
+                canonical.append(
+                    {
+                        "event_index": idx,
+                        "actor": "assistant",
+                        "event_type": "llm_call",
+                        "timestamp": e.get("timestamp", ""),
+                        "status": status,
+                        "session_id": session_id,
+                        "tokens_in": tokens_in,
+                        "tokens_out": tokens_out,
+                    }
+                )
                 idx += 1
 
             elif role == "toolResult":
@@ -400,9 +423,7 @@ def convert_openclaw(input_path: Path) -> list[dict]:
                 content = "\n".join(content_texts)
                 is_error = msg.get("isError", False)
 
-                has_error = is_error or (
-                    '"status": "error"' in content or '"error":' in content
-                )
+                has_error = is_error or ('"status": "error"' in content or '"error":' in content)
                 status = "error" if has_error else None
 
                 tool_args = None
@@ -414,16 +435,18 @@ def convert_openclaw(input_path: Path) -> list[dict]:
                     except (json.JSONDecodeError, TypeError):
                         pass
 
-                canonical.append({
-                    "event_index": idx,
-                    "actor": "tool",
-                    "event_type": "tool_result",
-                    "timestamp": e.get("timestamp", ""),
-                    "status": status,
-                    "session_id": session_id,
-                    "tool_name": tool_name,
-                    "tool_args": tool_args,
-                })
+                canonical.append(
+                    {
+                        "event_index": idx,
+                        "actor": "tool",
+                        "event_type": "tool_result",
+                        "timestamp": e.get("timestamp", ""),
+                        "status": status,
+                        "session_id": session_id,
+                        "tool_name": tool_name,
+                        "tool_args": tool_args,
+                    }
+                )
                 idx += 1
 
     return canonical
@@ -432,6 +455,7 @@ def convert_openclaw(input_path: Path) -> list[dict]:
 # ---------------------------------------------------------------------------
 # Cursor converter
 # ---------------------------------------------------------------------------
+
 
 def convert_cursor(input_path: Path) -> list[dict]:
     """Convert a Cursor agent transcript JSONL to canonical events.
@@ -459,21 +483,20 @@ def convert_cursor(input_path: Path) -> list[dict]:
         stop_reason = msg.get("stopReason")
 
         if role == "user":
-            text_parts = [
-                c.get("text", "") for c in content_items
-                if isinstance(c, dict) and c.get("type") == "text"
-            ]
+            text_parts = [c.get("text", "") for c in content_items if isinstance(c, dict) and c.get("type") == "text"]
             if text_parts:
-                canonical.append({
-                    "event_index": idx,
-                    "actor": "user",
-                    "event_type": "message",
-                    "timestamp": e.get("timestamp", ""),
-                    "status": None,
-                    "session_id": session_id,
-                    "schema_version": "v1",
-                    "trace_id": trace_id,
-                })
+                canonical.append(
+                    {
+                        "event_index": idx,
+                        "actor": "user",
+                        "event_type": "message",
+                        "timestamp": e.get("timestamp", ""),
+                        "status": None,
+                        "session_id": session_id,
+                        "schema_version": "v1",
+                        "trace_id": trace_id,
+                    }
+                )
                 idx += 1
 
         elif role == "assistant":
@@ -482,16 +505,18 @@ def convert_cursor(input_path: Path) -> list[dict]:
                 if isinstance(c, dict) and c.get("type") == "toolCall":
                     tool_name = c.get("name", "unknown")
                     tool_args = c.get("arguments", {})
-                    canonical.append({
-                        "event_index": idx,
-                        "actor": "assistant",
-                        "event_type": "tool_call",
-                        "timestamp": e.get("timestamp", ""),
-                        "status": None,
-                        "session_id": session_id,
-                        "tool_name": tool_name,
-                        "tool_args": tool_args if isinstance(tool_args, dict) else None,
-                    })
+                    canonical.append(
+                        {
+                            "event_index": idx,
+                            "actor": "assistant",
+                            "event_type": "tool_call",
+                            "timestamp": e.get("timestamp", ""),
+                            "status": None,
+                            "session_id": session_id,
+                            "tool_name": tool_name,
+                            "tool_args": tool_args if isinstance(tool_args, dict) else None,
+                        }
+                    )
                     idx += 1
 
             # Emit LLM call event
@@ -509,16 +534,18 @@ def convert_cursor(input_path: Path) -> list[dict]:
                 if to is not None and to > 0:
                     tokens_out = int(to)
 
-            canonical.append({
-                "event_index": idx,
-                "actor": "assistant",
-                "event_type": "llm_call",
-                "timestamp": e.get("timestamp", ""),
-                "status": status,
-                "session_id": session_id,
-                "tokens_in": tokens_in,
-                "tokens_out": tokens_out,
-            })
+            canonical.append(
+                {
+                    "event_index": idx,
+                    "actor": "assistant",
+                    "event_type": "llm_call",
+                    "timestamp": e.get("timestamp", ""),
+                    "status": status,
+                    "session_id": session_id,
+                    "tokens_in": tokens_in,
+                    "tokens_out": tokens_out,
+                }
+            )
             idx += 1
 
         elif role == "toolResult":
@@ -543,16 +570,18 @@ def convert_cursor(input_path: Path) -> list[dict]:
                 except (json.JSONDecodeError, TypeError):
                     pass
 
-            canonical.append({
-                "event_index": idx,
-                "actor": "tool",
-                "event_type": "tool_result",
-                "timestamp": e.get("timestamp", ""),
-                "status": status,
-                "session_id": session_id,
-                "tool_name": tool_name,
-                "tool_args": tool_args,
-            })
+            canonical.append(
+                {
+                    "event_index": idx,
+                    "actor": "tool",
+                    "event_type": "tool_result",
+                    "timestamp": e.get("timestamp", ""),
+                    "status": status,
+                    "session_id": session_id,
+                    "tool_name": tool_name,
+                    "tool_args": tool_args,
+                }
+            )
             idx += 1
 
     return canonical
@@ -561,6 +590,7 @@ def convert_cursor(input_path: Path) -> list[dict]:
 # ---------------------------------------------------------------------------
 # Generic converter (auto-detect format)
 # ---------------------------------------------------------------------------
+
 
 def _detect_format(input_path: Path) -> str:
     """Auto-detect trace format from the file content."""

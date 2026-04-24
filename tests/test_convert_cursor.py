@@ -1,15 +1,26 @@
 import json
-import pytest
 from pathlib import Path
-from trace_eval.convert import convert_cursor, _detect_format
+
+from trace_eval.convert import _detect_format, convert_cursor
 
 
 def test_convert_cursor_basic(tmp_path):
     """Test basic Cursor session conversion."""
     sample = tmp_path / "cursor.jsonl"
     sample.write_text(
-        json.dumps({"role": "user", "message": {"content": [{"type": "text", "text": "hello"}]}}) + "\n"
-        + json.dumps({"role": "assistant", "message": {"content": [{"type": "text", "text": "hi"}], "usage": {"input": 100, "output": 50}, "stopReason": "end_turn"}}) + "\n"
+        json.dumps({"role": "user", "message": {"content": [{"type": "text", "text": "hello"}]}})
+        + "\n"
+        + json.dumps(
+            {
+                "role": "assistant",
+                "message": {
+                    "content": [{"type": "text", "text": "hi"}],
+                    "usage": {"input": 100, "output": 50},
+                    "stopReason": "end_turn",
+                },
+            }
+        )
+        + "\n"
     )
     events = convert_cursor(sample)
     assert len(events) == 2
@@ -25,7 +36,13 @@ def test_convert_cursor_tool_calls(tmp_path):
     """Test Cursor tool_call extraction."""
     sample = tmp_path / "cursor.jsonl"
     sample.write_text(
-        json.dumps({"role": "assistant", "message": {"content": [{"type": "toolCall", "name": "read_file", "arguments": {"path": "app.py"}}]}}) + "\n"
+        json.dumps(
+            {
+                "role": "assistant",
+                "message": {"content": [{"type": "toolCall", "name": "read_file", "arguments": {"path": "app.py"}}]},
+            }
+        )
+        + "\n"
     )
     events = convert_cursor(sample)
     assert len(events) == 2  # tool_call + llm_call
@@ -39,7 +56,17 @@ def test_convert_cursor_tool_result_error(tmp_path):
     """Test Cursor error detection in tool results."""
     sample = tmp_path / "cursor.jsonl"
     sample.write_text(
-        json.dumps({"role": "toolResult", "message": {"toolName": "bash", "isError": True, "content": [{"type": "text", "text": "exit code 1\ncommand not found"}]}}) + "\n"
+        json.dumps(
+            {
+                "role": "toolResult",
+                "message": {
+                    "toolName": "bash",
+                    "isError": True,
+                    "content": [{"type": "text", "text": "exit code 1\ncommand not found"}],
+                },
+            }
+        )
+        + "\n"
     )
     events = convert_cursor(sample)
     assert len(events) == 1
@@ -51,7 +78,13 @@ def test_convert_cursor_tool_result_success(tmp_path):
     """Test Cursor successful tool result."""
     sample = tmp_path / "cursor.jsonl"
     sample.write_text(
-        json.dumps({"role": "toolResult", "message": {"toolName": "edit", "content": [{"type": "text", "text": "File edited successfully"}]}}) + "\n"
+        json.dumps(
+            {
+                "role": "toolResult",
+                "message": {"toolName": "edit", "content": [{"type": "text", "text": "File edited successfully"}]},
+            }
+        )
+        + "\n"
     )
     events = convert_cursor(sample)
     assert len(events) == 1
@@ -62,9 +95,7 @@ def test_convert_cursor_tool_result_success(tmp_path):
 def test_cursor_auto_detect(tmp_path):
     """Test auto-detection of Cursor format."""
     sample = tmp_path / "cursor.jsonl"
-    sample.write_text(
-        json.dumps({"role": "user", "message": {"content": [{"type": "text", "text": "hello"}]}}) + "\n"
-    )
+    sample.write_text(json.dumps({"role": "user", "message": {"content": [{"type": "text", "text": "hello"}]}}) + "\n")
     fmt = _detect_format(sample)
     assert fmt == "cursor"
 
