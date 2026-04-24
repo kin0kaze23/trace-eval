@@ -8,20 +8,18 @@ import sys
 from pathlib import Path
 
 from trace_eval import __version__
-from trace_eval.loader import load_trace_with_report
-from trace_eval.scoring import (
-    compute_scorecard,
-    DEFAULT_PROFILE,
-    REQUIRED_JUDGES,
-    PROFILES,
-)
-from trace_eval.report import format_text, format_json, format_summary
-from trace_eval.judges.reliability import judge_reliability
+from trace_eval.convert import CONVERTERS, _detect_format, convert
+from trace_eval.judges.context import judge_context
 from trace_eval.judges.efficiency import judge_efficiency
+from trace_eval.judges.reliability import judge_reliability
 from trace_eval.judges.retrieval import judge_retrieval
 from trace_eval.judges.tool_discipline import judge_tool_discipline
-from trace_eval.judges.context import judge_context
-from trace_eval.convert import convert, _detect_format, CONVERTERS
+from trace_eval.loader import load_trace_with_report
+from trace_eval.report import format_json, format_summary, format_text
+from trace_eval.scoring import (
+    PROFILES,
+    compute_scorecard,
+)
 
 JUDGES = {
     "reliability": judge_reliability,
@@ -156,16 +154,14 @@ def cmd_compare(args: argparse.Namespace) -> int:
     if args.format != "json":
         print("COMPARISON: before vs after")
         print("=" * 55)
-        print(
-            f"  Total score: {before_card.total_score:6.1f} -> {after_card.total_score:6.1f}"
-        )
+        print(f"  Total score: {before_card.total_score:6.1f} -> {after_card.total_score:6.1f}")
         total_delta = after_card.total_score - before_card.total_score
         if total_delta > 0:
             print(f"  Change:      +{total_delta:.1f} (improved)")
         elif total_delta < 0:
             print(f"  Change:      {total_delta:.1f} (regressed)")
         else:
-            print(f"  Change:      0.0 (no change)")
+            print("  Change:      0.0 (no change)")
         print()
 
         for dim in before_card.dimension_scores:
@@ -277,9 +273,7 @@ def cmd_ci(args: argparse.Namespace) -> int:
                 "actual": card.total_score,
             }
         )
-        failure_lines.append(
-            f"total score {card.total_score:.1f} < minimum {min_score}"
-        )
+        failure_lines.append(f"total score {card.total_score:.1f} < minimum {min_score}")
 
     # Check per-dimension thresholds
     if args.min_dimension:
@@ -300,11 +294,7 @@ def cmd_ci(args: argparse.Namespace) -> int:
 
     # Always output scorecard on stdout
     if use_json:
-        output = json.loads(
-            format_json(
-                card, adapter_report=adapter_report, failed_thresholds=failed_thresholds
-            )
-        )
+        output = json.loads(format_json(card, adapter_report=adapter_report, failed_thresholds=failed_thresholds))
         print(json.dumps(output, indent=2))
     else:
         print(format_text(card, adapter_report=adapter_report))
@@ -410,7 +400,7 @@ def cmd_remediate(args: argparse.Namespace) -> int:
 
 
 def cmd_locate(args: argparse.Namespace) -> int:
-    from trace_eval.locate import locate, format_locate
+    from trace_eval.locate import format_locate, locate
 
     locations = locate(
         agent_type=getattr(args, "agent_type", "all"),
@@ -422,7 +412,7 @@ def cmd_locate(args: argparse.Namespace) -> int:
 
 
 def cmd_doctor(args: argparse.Namespace) -> int:
-    from trace_eval.doctor import run_doctor, format_doctor_text, format_doctor_json
+    from trace_eval.doctor import format_doctor_json, format_doctor_text, run_doctor
 
     result = run_doctor()
     use_json = getattr(args, "format", "text") == "json"
@@ -439,7 +429,7 @@ def cmd_default(args: argparse.Namespace) -> int:
     This is the git-status-equivalent of trace-eval.
     No subcommand needed — just `trace-eval`.
     """
-    from trace_eval.loop import run_loop, format_loop_text
+    from trace_eval.loop import format_loop_text, run_loop
 
     result = run_loop(
         agent_type="all",
@@ -470,7 +460,7 @@ def cmd_default(args: argparse.Namespace) -> int:
 
 def cmd_loop(args: argparse.Namespace) -> int:
     """Run the full trace-eval loop: locate -> convert -> score -> remediate."""
-    from trace_eval.loop import run_loop, format_loop_text, format_loop_json
+    from trace_eval.loop import format_loop_json, format_loop_text, run_loop
 
     result = run_loop(
         agent_type=getattr(args, "agent_type", "all"),
@@ -524,9 +514,7 @@ def main():
     sub = parser.add_subparsers(dest="command", required=False)
 
     # validate
-    p_validate = sub.add_parser(
-        "validate", help="Schema validation + field coverage + adapter capabilities"
-    )
+    p_validate = sub.add_parser("validate", help="Schema validation + field coverage + adapter capabilities")
     p_validate.add_argument("trace", help="Path to trace file (.jsonl or .db)")
 
     # run
@@ -565,24 +553,18 @@ def main():
         default="text",
         help="Output format (default: text)",
     )
-    p_compare.add_argument(
-        "--summary", action="store_true", help="Concise before/after comparison"
-    )
+    p_compare.add_argument("--summary", action="store_true", help="Concise before/after comparison")
 
     # ci
     p_ci = sub.add_parser("ci", help="CI gate -- exits non-zero below threshold")
     p_ci.add_argument("trace", help="Path to trace file")
-    p_ci.add_argument(
-        "--min-score", type=float, default=80, help="Minimum total score (default: 80)"
-    )
+    p_ci.add_argument("--min-score", type=float, default=80, help="Minimum total score (default: 80)")
     p_ci.add_argument(
         "--min-dimension",
         action="append",
         help="Per-dimension threshold (e.g., reliability=90)",
     )
-    p_ci.add_argument(
-        "--allow-partial", action="store_true", help="Allow unscorable judges"
-    )
+    p_ci.add_argument("--allow-partial", action="store_true", help="Allow unscorable judges")
     p_ci.add_argument(
         "--format",
         choices=["text", "json"],
@@ -597,9 +579,7 @@ def main():
     )
 
     # convert
-    p_convert = sub.add_parser(
-        "convert", help="Convert non-canonical traces to canonical JSONL"
-    )
+    p_convert = sub.add_parser("convert", help="Convert non-canonical traces to canonical JSONL")
     p_convert.add_argument("input", help="Path to trace file to convert")
     p_convert.add_argument(
         "format_type",
@@ -608,9 +588,7 @@ def main():
         choices=["claude-code", "openclaw", "cursor"],
         help="Trace format (auto-detected if omitted)",
     )
-    p_convert.add_argument(
-        "-o", "--output", help="Output path (default: <input>_canonical.jsonl)"
-    )
+    p_convert.add_argument("-o", "--output", help="Output path (default: <input>_canonical.jsonl)")
 
     # locate
     p_locate = sub.add_parser("locate", help="Find recent agent trace files")
@@ -621,17 +599,11 @@ def main():
         choices=["claude-code", "cursor", "openclaw", "all"],
         help="Agent type to search for (default: all)",
     )
-    p_locate.add_argument(
-        "--limit", type=int, default=20, help="Maximum results (default: 20)"
-    )
-    p_locate.add_argument(
-        "--hours", type=int, default=48, help="Search window in hours (default: 48)"
-    )
+    p_locate.add_argument("--limit", type=int, default=20, help="Maximum results (default: 20)")
+    p_locate.add_argument("--hours", type=int, default=48, help="Search window in hours (default: 48)")
 
     # doctor
-    p_doctor = sub.add_parser(
-        "doctor", help="Diagnose installation, trace availability, and readiness"
-    )
+    p_doctor = sub.add_parser("doctor", help="Diagnose installation, trace availability, and readiness")
     p_doctor.add_argument(
         "--format",
         choices=["text", "json"],
@@ -640,16 +612,10 @@ def main():
     )
 
     # remediate
-    p_remediate = sub.add_parser(
-        "remediate", help="Get recommended actions to improve agent run quality"
-    )
+    p_remediate = sub.add_parser("remediate", help="Get recommended actions to improve agent run quality")
     p_remediate.add_argument("trace", help="Path to trace file")
-    p_remediate.add_argument(
-        "--profile", choices=list(PROFILES.keys()), default=None, help="Scoring profile"
-    )
-    p_remediate.add_argument(
-        "--apply-safe", action="store_true", help="Apply safe fixes automatically"
-    )
+    p_remediate.add_argument("--profile", choices=list(PROFILES.keys()), default=None, help="Scoring profile")
+    p_remediate.add_argument("--apply-safe", action="store_true", help="Apply safe fixes automatically")
     p_remediate.add_argument(
         "--report",
         action="store_true",
@@ -657,9 +623,7 @@ def main():
     )
 
     # loop
-    p_loop = sub.add_parser(
-        "loop", help="Full loop: locate -> convert -> score -> remediate"
-    )
+    p_loop = sub.add_parser("loop", help="Full loop: locate -> convert -> score -> remediate")
     p_loop.add_argument(
         "agent_type",
         nargs="?",
@@ -667,9 +631,7 @@ def main():
         choices=["claude-code", "cursor", "openclaw", "all"],
         help="Agent type to search for (default: all)",
     )
-    p_loop.add_argument(
-        "--hours", type=int, default=48, help="Search window in hours (default: 48)"
-    )
+    p_loop.add_argument("--hours", type=int, default=48, help="Search window in hours (default: 48)")
     p_loop.add_argument(
         "--profile",
         choices=list(PROFILES.keys()),
@@ -677,12 +639,8 @@ def main():
         help="Scoring profile (default: auto-detect)",
     )
     p_loop.add_argument("--compare", help="Path to previous trace for comparison")
-    p_loop.add_argument(
-        "--apply-safe", action="store_true", help="Apply safe fixes automatically"
-    )
-    p_loop.add_argument(
-        "--report", action="store_true", help="Generate markdown remediation report"
-    )
+    p_loop.add_argument("--apply-safe", action="store_true", help="Apply safe fixes automatically")
+    p_loop.add_argument("--report", action="store_true", help="Generate markdown remediation report")
     p_loop.add_argument("--output", help="Directory for generated files")
     p_loop.add_argument(
         "--format",

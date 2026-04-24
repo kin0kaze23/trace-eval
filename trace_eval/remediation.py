@@ -5,8 +5,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-from trace_eval.scoring import Scorecard
 from trace_eval.schema import Event, FrictionFlag
+from trace_eval.scoring import Scorecard
 
 # v1 static mapping: missing-tool patterns → agent-ready capability IDs.
 # Not imported from agent-ready — trace-eval references by string only.
@@ -108,9 +108,7 @@ def analyze(card: Scorecard) -> list[RemediationAction]:
     return _analyze_rules(card, events=None)
 
 
-def analyze_with_context(
-    card: Scorecard, events: list[Event]
-) -> list[RemediationAction]:
+def analyze_with_context(card: Scorecard, events: list[Event]) -> list[RemediationAction]:
     """Analyze a scorecard with full trace context for specific remediation.
 
     Enriches action labels and descriptions with actual failure data:
@@ -121,9 +119,7 @@ def analyze_with_context(
     return _analyze_rules(card, events=events)
 
 
-def _analyze_rules(
-    card: Scorecard, events: list[Event] | None
-) -> list[RemediationAction]:
+def _analyze_rules(card: Scorecard, events: list[Event] | None) -> list[RemediationAction]:
     """Core rule engine. If events are provided, enriches actions with context."""
     actions: list[RemediationAction] = []
     flag_ids = {f.id for f in card.all_flags}
@@ -135,9 +131,7 @@ def _analyze_rules(
     tool_retry_tools: dict[str, int] = {}
     total_errors = 0
     if events:
-        error_tools, error_patterns, tool_retry_tools, total_errors = (
-            _extract_failure_context(events, card.all_flags)
-        )
+        error_tools, error_patterns, tool_retry_tools, total_errors = _extract_failure_context(events, card.all_flags)
 
     # Rule 1: reliability errors → fix_errors
     if "reliability_errors" in flag_ids:
@@ -219,9 +213,7 @@ def _analyze_rules(
                 )
             )
         else:
-            actions.append(
-                _make_action("reduce_tool_calls", "efficiency_high_tool_calls")
-            )
+            actions.append(_make_action("reduce_tool_calls", "efficiency_high_tool_calls"))
 
     # Rule 5: tool retries/redundant → reduce_retries
     if "tool_retries" in flag_ids or "tool_redundant" in flag_ids:
@@ -273,9 +265,7 @@ def _analyze_rules(
                 description=f"Detected '{trigger}' in trace. Run: {suggested_cmd}",
                 confidence=ACTION_TYPES["install_capability"]["confidence"],
                 safe_to_automate=ACTION_TYPES["install_capability"]["safe_to_automate"],
-                requires_approval=ACTION_TYPES["install_capability"][
-                    "requires_approval"
-                ],
+                requires_approval=ACTION_TYPES["install_capability"]["requires_approval"],
                 triggered_by=trigger,
                 context={"capability_id": cap_id, "suggested_command": suggested_cmd},
             )
@@ -309,9 +299,7 @@ def _extract_failure_context(
             error_event_indices.add(f.event_index)
 
     # Count errors by tool name
-    error_events = [
-        e for e in events if e.status is not None and e.status.value == "error"
-    ]
+    error_events = [e for e in events if e.status is not None and e.status.value == "error"]
     total_errors = len(error_events)
 
     for e in error_events:
@@ -319,11 +307,7 @@ def _extract_failure_context(
         error_tools[tool] = error_tools.get(tool, 0) + 1
 
     # Detect retry patterns (same tool error then success)
-    tool_calls = [
-        e
-        for e in events
-        if e.event_type is not None and e.event_type.value == "tool_call"
-    ]
+    tool_calls = [e for e in events if e.event_type is not None and e.event_type.value == "tool_call"]
     for i in range(1, len(tool_calls)):
         prev = tool_calls[i - 1]
         curr = tool_calls[i]
@@ -376,11 +360,7 @@ def _extract_token_context(events: list[Event]) -> dict | None:
     if total_tokens == 0:
         return None
 
-    llm_calls = sum(
-        1
-        for e in events
-        if e.event_type is not None and e.event_type.value == "llm_call"
-    )
+    llm_calls = sum(1 for e in events if e.event_type is not None and e.event_type.value == "llm_call")
 
     return {
         "total_tokens": total_tokens,
@@ -496,9 +476,7 @@ def format_remediation(actions: list[RemediationAction], card: Scorecard) -> str
     lines.append("  TOP 3 ACTIONS:")
     for i, action in enumerate(top_3, 1):
         approval_tag = (
-            "[AUTO-SAFE]"
-            if (action.safe_to_automate and not action.requires_approval)
-            else "[REQUIRES APPROVAL]"
+            "[AUTO-SAFE]" if (action.safe_to_automate and not action.requires_approval) else "[REQUIRES APPROVAL]"
         )
         lines.append(f"  {i}. {approval_tag} {action.label}")
         lines.append(f"     {action.description}")
@@ -511,17 +489,13 @@ def format_remediation(actions: list[RemediationAction], card: Scorecard) -> str
         lines.append("  Additional actions:")
         for i, action in enumerate(remaining, 4):
             approval_tag = (
-                "[AUTO-SAFE]"
-                if (action.safe_to_automate and not action.requires_approval)
-                else "[REQUIRES APPROVAL]"
+                "[AUTO-SAFE]" if (action.safe_to_automate and not action.requires_approval) else "[REQUIRES APPROVAL]"
             )
             lines.append(f"  {i}. {approval_tag} {action.label}")
             lines.append(f"     {action.description}")
             lines.append("")
 
-    lines.append(
-        "To auto-apply safe fixes: trace-eval remediate trace.jsonl --apply-safe"
-    )
+    lines.append("To auto-apply safe fixes: trace-eval remediate trace.jsonl --apply-safe")
     lines.append("To generate full report: trace-eval remediate trace.jsonl --report")
     return "\n".join(lines)
 
@@ -537,9 +511,7 @@ def format_next_steps(actions: list[RemediationAction], card: Scorecard) -> str:
     ]
     for i, action in enumerate(actions[:3], 1):
         approval_tag = (
-            "[AUTO-SAFE]"
-            if (action.safe_to_automate and not action.requires_approval)
-            else "[REQUIRES APPROVAL]"
+            "[AUTO-SAFE]" if (action.safe_to_automate and not action.requires_approval) else "[REQUIRES APPROVAL]"
         )
         lines.append(f"  {i}. {approval_tag} {action.label}")
     return "\n".join(lines)

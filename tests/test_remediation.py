@@ -1,18 +1,14 @@
-import pytest
 from trace_eval.remediation import (
     analyze,
     analyze_with_context,
-    ACTION_TYPES,
-    format_remediation,
     format_next_steps,
+    format_remediation,
 )
+from trace_eval.schema import Event, EventType, FrictionFlag, Status
 from trace_eval.scoring import Scorecard
-from trace_eval.schema import Event, EventType, Status, FrictionFlag
 
 
-def _make_card(
-    flags=None, dim_scores=None, unscorable=None, profile="default", total_score=50
-):
+def _make_card(flags=None, dim_scores=None, unscorable=None, profile="default", total_score=50):
     return Scorecard(
         total_score=total_score,
         dimension_scores=dim_scores
@@ -285,9 +281,7 @@ def test_remediation_approval_tag_placement():
         stripped = line.strip()
         if stripped and stripped[0].isdigit() and ". " in stripped:
             after_number = stripped.split(". ", 1)[1]
-            assert (
-                "[AUTO-SAFE]" in after_number or "[REQUIRES APPROVAL]" in after_number
-            )
+            assert "[AUTO-SAFE]" in after_number or "[REQUIRES APPROVAL]" in after_number
 
 
 def test_next_steps_compact_format():
@@ -386,6 +380,7 @@ def test_install_capability_hit_from_error_type():
 def test_install_capability_hit_from_fixture():
     """Synthetic fixture trace_missing_vercel.jsonl triggers install_capability."""
     from pathlib import Path
+
     from trace_eval.loader import load_trace
 
     fixture = Path(__file__).parent / "fixtures" / "trace_missing_vercel.jsonl"
@@ -506,9 +501,7 @@ def test_install_capability_payload_shape():
     assert action.requires_approval is True
     assert action.confidence == "high"
     assert action.context["capability_id"] == "vercel_cli"
-    assert (
-        action.context["suggested_command"] == "agent-ready fix --capability vercel_cli"
-    )
+    assert action.context["suggested_command"] == "agent-ready fix --capability vercel_cli"
     assert action.triggered_by == "command not found: vercel"
 
 

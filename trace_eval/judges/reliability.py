@@ -8,8 +8,12 @@ from trace_eval.schema import Event, FrictionFlag, JudgeResult
 def judge_reliability(events: list[Event]) -> JudgeResult:
     if not events:
         return JudgeResult(
-            score=None, confidence="low", friction_flags=[],
-            explanation="No events to evaluate", raw_metrics={}, scorable=False,
+            score=None,
+            confidence="low",
+            friction_flags=[],
+            explanation="No events to evaluate",
+            raw_metrics={},
+            scorable=False,
         )
 
     # Find terminal event (session_end or last event)
@@ -53,25 +57,37 @@ def judge_reliability(events: list[Event]) -> JudgeResult:
     # Friction flags
     flags: list[FrictionFlag] = []
     if terminal_value == "timeout":
-        flags.append(FrictionFlag(
-            id="reliability_terminal_timeout", severity="critical",
-            dimension="reliability", event_index=None,
-            suggestion="Investigate timeout root cause in tool or LLM calls",
-        ))
+        flags.append(
+            FrictionFlag(
+                id="reliability_terminal_timeout",
+                severity="critical",
+                dimension="reliability",
+                event_index=None,
+                suggestion="Investigate timeout root cause in tool or LLM calls",
+            )
+        )
     elif terminal_value == "partial":
-        flags.append(FrictionFlag(
-            id="reliability_terminal_partial", severity="high",
-            dimension="reliability", event_index=None,
-            suggestion="Agent did not produce a complete result",
-        ))
+        flags.append(
+            FrictionFlag(
+                id="reliability_terminal_partial",
+                severity="high",
+                dimension="reliability",
+                event_index=None,
+                suggestion="Agent did not produce a complete result",
+            )
+        )
 
     if error_count > 0:
         error_indices = [e.event_index for e in non_terminal if e.status and e.status.value == "error"]
-        flags.append(FrictionFlag(
-            id="reliability_errors", severity="medium",
-            dimension="reliability", event_index=error_indices[0],
-            suggestion=f"Review {error_count} error(s) at event indices {error_indices}",
-        ))
+        flags.append(
+            FrictionFlag(
+                id="reliability_errors",
+                severity="medium",
+                dimension="reliability",
+                event_index=error_indices[0],
+                suggestion=f"Review {error_count} error(s) at event indices {error_indices}",
+            )
+        )
 
     return JudgeResult(
         score=score,

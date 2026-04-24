@@ -68,11 +68,21 @@ class FieldCoverage:
     @staticmethod
     def compute(events: list[Event]) -> FieldCoverage:
         tracked = [
-            "tokens_in", "tokens_out", "cost_estimate", "latency_ms",
-            "context_pressure_pct", "context_tokens", "tool_name",
-            "tool_args", "retrieval_entrypoint", "retrieval_steps",
-            "deprecated_file_touched", "fallback_search_used",
-            "span_id", "parent_span_id", "error_type",
+            "tokens_in",
+            "tokens_out",
+            "cost_estimate",
+            "latency_ms",
+            "context_pressure_pct",
+            "context_tokens",
+            "tool_name",
+            "tool_args",
+            "retrieval_entrypoint",
+            "retrieval_steps",
+            "deprecated_file_touched",
+            "fallback_search_used",
+            "span_id",
+            "parent_span_id",
+            "error_type",
         ]
         coverage: dict[str, FieldCoverageEntry] = {}
         for f in tracked:
@@ -158,9 +168,15 @@ class Event:
             error_type=data.get("error_type"),
             tokens_in=int(data["tokens_in"]) if "tokens_in" in data and data["tokens_in"] is not None else None,
             tokens_out=int(data["tokens_out"]) if "tokens_out" in data and data["tokens_out"] is not None else None,
-            cost_estimate=float(data["cost_estimate"]) if "cost_estimate" in data and data["cost_estimate"] is not None else None,
-            context_tokens=int(data["context_tokens"]) if "context_tokens" in data and data["context_tokens"] is not None else None,
-            context_pressure_pct=float(data["context_pressure_pct"]) if "context_pressure_pct" in data and data["context_pressure_pct"] is not None else None,
+            cost_estimate=float(data["cost_estimate"])
+            if "cost_estimate" in data and data["cost_estimate"] is not None
+            else None,
+            context_tokens=int(data["context_tokens"])
+            if "context_tokens" in data and data["context_tokens"] is not None
+            else None,
+            context_pressure_pct=float(data["context_pressure_pct"])
+            if "context_pressure_pct" in data and data["context_pressure_pct"] is not None
+            else None,
             retrieval_entrypoint=data.get("retrieval_entrypoint"),
             retrieval_steps=data.get("retrieval_steps"),
             deprecated_file_touched=data.get("deprecated_file_touched"),

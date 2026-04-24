@@ -1,5 +1,4 @@
 import json
-import pytest
 import subprocess
 import sys
 from pathlib import Path
@@ -14,22 +13,87 @@ def _make_trace(tmp_path, name, lines):
 
 
 GOOD_LINES = [
-    {"schema_version":"v1","trace_id":"g-1","task_id":"t-1","session_id":"s-1","event_index":0,"actor":"user","event_type":"session_start","timestamp":"2026-04-15T10:00:00Z","status":"success"},
-    {"schema_version":"v1","trace_id":"g-1","task_id":"t-1","session_id":"s-1","event_index":1,"actor":"assistant","event_type":"llm_call","timestamp":"2026-04-15T10:00:05Z","status":"success","tokens_in":100,"tokens_out":50,"cost_estimate":0.01},
-    {"schema_version":"v1","trace_id":"g-1","task_id":"t-1","session_id":"s-1","event_index":2,"actor":"assistant","event_type":"session_end","timestamp":"2026-04-15T10:00:10Z","status":"success"},
+    {
+        "schema_version": "v1",
+        "trace_id": "g-1",
+        "task_id": "t-1",
+        "session_id": "s-1",
+        "event_index": 0,
+        "actor": "user",
+        "event_type": "session_start",
+        "timestamp": "2026-04-15T10:00:00Z",
+        "status": "success",
+    },
+    {
+        "schema_version": "v1",
+        "trace_id": "g-1",
+        "task_id": "t-1",
+        "session_id": "s-1",
+        "event_index": 1,
+        "actor": "assistant",
+        "event_type": "llm_call",
+        "timestamp": "2026-04-15T10:00:05Z",
+        "status": "success",
+        "tokens_in": 100,
+        "tokens_out": 50,
+        "cost_estimate": 0.01,
+    },
+    {
+        "schema_version": "v1",
+        "trace_id": "g-1",
+        "task_id": "t-1",
+        "session_id": "s-1",
+        "event_index": 2,
+        "actor": "assistant",
+        "event_type": "session_end",
+        "timestamp": "2026-04-15T10:00:10Z",
+        "status": "success",
+    },
 ]
 
 BAD_LINES = [
-    {"schema_version":"v1","trace_id":"b-1","task_id":"t-2","session_id":"s-2","event_index":0,"actor":"user","event_type":"session_start","timestamp":"2026-04-15T10:00:00Z","status":"success"},
-    {"schema_version":"v1","trace_id":"b-1","task_id":"t-2","session_id":"s-2","event_index":1,"actor":"assistant","event_type":"tool_call","timestamp":"2026-04-15T10:00:05Z","status":"error","tool_name":"write"},
-    {"schema_version":"v1","trace_id":"b-1","task_id":"t-2","session_id":"s-2","event_index":2,"actor":"assistant","event_type":"session_end","timestamp":"2026-04-15T10:00:10Z","status":"error"},
+    {
+        "schema_version": "v1",
+        "trace_id": "b-1",
+        "task_id": "t-2",
+        "session_id": "s-2",
+        "event_index": 0,
+        "actor": "user",
+        "event_type": "session_start",
+        "timestamp": "2026-04-15T10:00:00Z",
+        "status": "success",
+    },
+    {
+        "schema_version": "v1",
+        "trace_id": "b-1",
+        "task_id": "t-2",
+        "session_id": "s-2",
+        "event_index": 1,
+        "actor": "assistant",
+        "event_type": "tool_call",
+        "timestamp": "2026-04-15T10:00:05Z",
+        "status": "error",
+        "tool_name": "write",
+    },
+    {
+        "schema_version": "v1",
+        "trace_id": "b-1",
+        "task_id": "t-2",
+        "session_id": "s-2",
+        "event_index": 2,
+        "actor": "assistant",
+        "event_type": "session_end",
+        "timestamp": "2026-04-15T10:00:10Z",
+        "status": "error",
+    },
 ]
 
 
 def _run(args, expect_fail=False):
     result = subprocess.run(
         [sys.executable, "-m", "trace_eval.cli"] + args,
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
         cwd=str(TRACE_EVAL_DIR),
     )
     if not expect_fail:

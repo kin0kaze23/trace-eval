@@ -10,6 +10,7 @@ import json
 import tempfile
 from pathlib import Path
 
+from trace_eval import __version__
 from trace_eval.autofix import apply_safe_fixes, generate_remediation_report
 from trace_eval.convert import _detect_format, convert
 from trace_eval.judges.context import judge_context
@@ -17,9 +18,8 @@ from trace_eval.judges.efficiency import judge_efficiency
 from trace_eval.judges.reliability import judge_reliability
 from trace_eval.judges.retrieval import judge_retrieval
 from trace_eval.judges.tool_discipline import judge_tool_discipline
-from trace_eval.locate import locate
 from trace_eval.loader import load_trace_with_report
-from trace_eval.remediation import analyze
+from trace_eval.locate import locate
 from trace_eval.scoring import compute_scorecard
 
 JUDGES = {
@@ -120,12 +120,10 @@ def run_loop(
         return result
 
     try:
-        judge_results = {
-            name: judge_fn(trace.events) for name, judge_fn in JUDGES.items()
-        }
+        judge_results = {name: judge_fn(trace.events) for name, judge_fn in JUDGES.items()}
         card = compute_scorecard(judge_results, profile=profile)
         result["scorecard"] = card
-    except Exception as e:
+    except Exception:
         result["error"] = "Score computation failed."
         return result
 
@@ -158,9 +156,7 @@ def run_loop(
         try:
             before_path = Path(compare_path)
             before_trace, _ = load_trace_with_report(before_path)
-            before_judges = {
-                name: judge_fn(before_trace.events) for name, judge_fn in JUDGES.items()
-            }
+            before_judges = {name: judge_fn(before_trace.events) for name, judge_fn in JUDGES.items()}
             before_card = compute_scorecard(before_judges, profile=profile)
             delta = round(card.total_score - before_card.total_score, 1)
             result["compare"] = {
@@ -170,9 +166,7 @@ def run_loop(
                 "before_name": before_path.name,
             }
         except FileNotFoundError:
-            result.setdefault("_warnings", []).append(
-                f"Compare file not found: {compare_path}"
-            )
+            result.setdefault("_warnings", []).append(f"Compare file not found: {compare_path}")
         except Exception as e:
             result.setdefault("_warnings", []).append(f"Compare failed: {e}")
 
@@ -183,9 +177,7 @@ def run_loop(
                 report_out = Path(output_dir) / f"{Path(trace_path).stem}_report.md"
             else:
                 report_out = None
-            report_path = generate_remediation_report(
-                actions, card, Path(canonical_path), output_path=report_out
-            )
+            report_path = generate_remediation_report(actions, card, Path(canonical_path), output_path=report_out)
             result["report_path"] = report_path
         except Exception as e:
             result.setdefault("_warnings", []).append(f"Report generation failed: {e}")
@@ -205,7 +197,7 @@ def format_loop_text(result: dict) -> str:
     actions = result["actions"]
     parts = [
         "=" * 60,
-        "  TRACE-EVAL LOOP  v0.5.0",
+        f"  TRACE-EVAL LOOP  v{__version__}",
         "=" * 60,
         "",
         f"  Trace: {result['trace_name']} ({result['trace_size']}, {result['trace_agent']}, {result['trace_age']})",
@@ -218,16 +210,8 @@ def format_loop_text(result: dict) -> str:
     if top_flags:
         parts.append("  TOP 3 ISSUES:")
         for f in top_flags:
-            prefix = (
-                "[!]"
-                if f.severity in ("critical", "high")
-                else "[-]"
-                if f.severity == "medium"
-                else "[~]"
-            )
-            summary = (
-                f.suggestion[:60] + "..." if len(f.suggestion) > 60 else f.suggestion
-            )
+            prefix = "[!]" if f.severity in ("critical", "high") else "[-]" if f.severity == "medium" else "[~]"
+            summary = f.suggestion[:60] + "..." if len(f.suggestion) > 60 else f.suggestion
             parts.append(f"  {prefix} {f.id} ({f.severity}) \u2014 {summary}")
     else:
         parts.append("  No issues detected.")
@@ -236,11 +220,7 @@ def format_loop_text(result: dict) -> str:
     if actions:
         parts.append("  NEXT ACTIONS:")
         for i, a in enumerate(actions[:3], 1):
-            tag = (
-                "[AUTO-SAFE]"
-                if (a.safe_to_automate and not a.requires_approval)
-                else "[REQUIRES APPROVAL]"
-            )
+            tag = "[AUTO-SAFE]" if (a.safe_to_automate and not a.requires_approval) else "[REQUIRES APPROVAL]"
             parts.append(f"  {i}. {tag} {a.label}")
     else:
         parts.append("  No recommended actions. Score looks good.")
@@ -254,9 +234,7 @@ def format_loop_text(result: dict) -> str:
     if result.get("compare"):
         c = result["compare"]
         delta_str = f"+{c['delta']}" if c["delta"] >= 0 else str(c["delta"])
-        parts.append(
-            f"  Delta vs {c['before_name']}: {delta_str} ({c['before_score']:.0f} -> {c['after_score']:.0f})"
-        )
+        parts.append(f"  Delta vs {c['before_name']}: {delta_str} ({c['before_score']:.0f} -> {c['after_score']:.0f})")
 
     if result.get("report_path"):
         parts.append(f"  Report: {result['report_path']}")
@@ -279,9 +257,7 @@ def format_loop_json(result: dict) -> str:
     card = result["scorecard"]
     flags = sorted(card.all_flags, key=lambda f: SEVERITY_ORDER.get(f.severity, 9))[:3]
 
-    top_issues = [
-        {"id": f.id, "severity": f.severity, "suggestion": f.suggestion} for f in flags
-    ]
+    top_issues = [{"id": f.id, "severity": f.severity, "suggestion": f.suggestion} for f in flags]
 
     actions = result["actions"][:3]
     top_actions = [
@@ -299,9 +275,7 @@ def format_loop_json(result: dict) -> str:
         "rating": card.rating,
         "top_issues": top_issues,
         "top_actions": top_actions,
-        "safe_fixes_applied": [
-            fx.get("label", "?") for fx in result.get("safe_fixes_applied", [])
-        ],
+        "safe_fixes_applied": [fx.get("label", "?") for fx in result.get("safe_fixes_applied", [])],
         "delta": result.get("compare"),
         "report_path": result.get("report_path"),
     }
@@ -321,12 +295,11 @@ def _human_size(size_bytes: int) -> str:
 
 def _no_traces_error(agent_type: str, hours: int) -> str:
     """Build a helpful error message when no traces are found."""
-    from trace_eval.locate import SEARCH_PATHS
     import os
 
-    agents_to_search = (
-        ["claude-code", "cursor", "openclaw"] if agent_type == "all" else [agent_type]
-    )
+    from trace_eval.locate import SEARCH_PATHS
+
+    agents_to_search = ["claude-code", "cursor", "openclaw"] if agent_type == "all" else [agent_type]
 
     # Check which agent directories exist
     missing_agents = []
@@ -364,31 +337,19 @@ def _no_traces_error(agent_type: str, hours: int) -> str:
 def _extract_token_summary(events):
     """Extract token usage for plain-English output."""
     total_tokens = sum((e.tokens_in or 0) + (e.tokens_out or 0) for e in events)
-    llm_calls = sum(
-        1
-        for e in events
-        if e.event_type is not None and e.event_type.value == "llm_call"
-    )
+    llm_calls = sum(1 for e in events if e.event_type is not None and e.event_type.value == "llm_call")
     return {"total_tokens": total_tokens, "llm_calls": llm_calls}
 
 
 def _extract_tool_summary(events):
     """Extract tool call counts for plain-English output."""
-    total = sum(
-        1
-        for e in events
-        if e.event_type is not None and e.event_type.value == "tool_call"
-    )
+    total = sum(1 for e in events if e.event_type is not None and e.event_type.value == "tool_call")
     return {"total": total}
 
 
 def _extract_retry_summary(events):
     """Extract tool retry counts for plain-English output."""
-    tool_calls = [
-        e
-        for e in events
-        if e.event_type is not None and e.event_type.value == "tool_call"
-    ]
+    tool_calls = [e for e in events if e.event_type is not None and e.event_type.value == "tool_call"]
     retries = 0
     for i in range(1, len(tool_calls)):
         prev = tool_calls[i - 1]

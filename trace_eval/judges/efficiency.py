@@ -8,18 +8,17 @@ from trace_eval.schema import Event, FrictionFlag, JudgeResult
 def judge_efficiency(events: list[Event]) -> JudgeResult:
     if not events:
         return JudgeResult(
-            score=None, confidence="low", friction_flags=[],
-            explanation="No events to evaluate", raw_metrics={}, scorable=False,
+            score=None,
+            confidence="low",
+            friction_flags=[],
+            explanation="No events to evaluate",
+            raw_metrics={},
+            scorable=False,
         )
 
-    total_tokens = sum(
-        (e.tokens_in or 0) + (e.tokens_out or 0) for e in events
-    )
+    total_tokens = sum((e.tokens_in or 0) + (e.tokens_out or 0) for e in events)
     cost_estimate = sum(e.cost_estimate or 0 for e in events)
-    tool_call_count = sum(
-        1 for e in events
-        if e.event_type is not None and e.event_type.value == "tool_call"
-    )
+    tool_call_count = sum(1 for e in events if e.event_type is not None and e.event_type.value == "tool_call")
     total_latency_ms = sum(e.latency_ms or 0 for e in events)
 
     # Sub-scores
@@ -39,23 +38,35 @@ def judge_efficiency(events: list[Event]) -> JudgeResult:
     # Friction flags
     flags: list[FrictionFlag] = []
     if total_tokens > 25000:
-        flags.append(FrictionFlag(
-            id="efficiency_high_tokens", severity="medium",
-            dimension="efficiency", event_index=None,
-            suggestion="Reduce token usage with more focused prompts",
-        ))
+        flags.append(
+            FrictionFlag(
+                id="efficiency_high_tokens",
+                severity="medium",
+                dimension="efficiency",
+                event_index=None,
+                suggestion="Reduce token usage with more focused prompts",
+            )
+        )
     if cost_estimate > 1.0:
-        flags.append(FrictionFlag(
-            id="efficiency_high_cost", severity="medium",
-            dimension="efficiency", event_index=None,
-            suggestion="Cost exceeded $1 — consider cheaper model",
-        ))
+        flags.append(
+            FrictionFlag(
+                id="efficiency_high_cost",
+                severity="medium",
+                dimension="efficiency",
+                event_index=None,
+                suggestion="Cost exceeded $1 — consider cheaper model",
+            )
+        )
     if tool_call_count > 25:
-        flags.append(FrictionFlag(
-            id="efficiency_high_tool_calls", severity="low",
-            dimension="efficiency", event_index=None,
-            suggestion="Excessive tool calls detected",
-        ))
+        flags.append(
+            FrictionFlag(
+                id="efficiency_high_tool_calls",
+                severity="low",
+                dimension="efficiency",
+                event_index=None,
+                suggestion="Excessive tool calls detected",
+            )
+        )
 
     return JudgeResult(
         score=score,

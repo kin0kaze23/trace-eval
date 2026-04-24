@@ -1,5 +1,5 @@
-import pytest
 from pathlib import Path
+
 from trace_eval.autofix import apply_safe_fixes, generate_remediation_report
 from trace_eval.remediation import RemediationAction
 from trace_eval.scoring import Scorecard
@@ -9,12 +9,18 @@ def _make_card(unscorable=None, profile="default", total_score=50):
     return Scorecard(
         total_score=total_score,
         dimension_scores={
-            "reliability": 50.0, "efficiency": 50.0, "retrieval": 50.0,
-            "tool_discipline": 50.0, "context": 50.0,
+            "reliability": 50.0,
+            "efficiency": 50.0,
+            "retrieval": 50.0,
+            "tool_discipline": 50.0,
+            "context": 50.0,
         },
         dimension_confidence={
-            "reliability": "high", "efficiency": "high", "retrieval": "high",
-            "tool_discipline": "high", "context": "high",
+            "reliability": "high",
+            "efficiency": "high",
+            "retrieval": "high",
+            "tool_discipline": "high",
+            "context": "high",
         },
         all_flags=[],
         scorable_dimensions=["reliability", "efficiency", "retrieval", "tool_discipline", "context"],

@@ -1,4 +1,5 @@
 """Tests for Hermes SQLite adapter against the real DB schema."""
+
 import sqlite3
 from pathlib import Path
 
@@ -66,10 +67,32 @@ def hermes_db(tmp_path: Path):
     c.execute(
         "INSERT INTO sessions VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         [
-            "sess-001", "test", "user-1", "claude-sonnet-4-6",
-            None, None, None, "2026-04-15T10:00:00Z", None, None,
-            3, 1, 1200, 350, 0, 0, 0, None, None, None,
-            0.0, 0.045, "complete", "direct", 1, "Test Session",
+            "sess-001",
+            "test",
+            "user-1",
+            "claude-sonnet-4-6",
+            None,
+            None,
+            None,
+            "2026-04-15T10:00:00Z",
+            None,
+            None,
+            3,
+            1,
+            1200,
+            350,
+            0,
+            0,
+            0,
+            None,
+            None,
+            None,
+            0.0,
+            0.045,
+            "complete",
+            "direct",
+            1,
+            "Test Session",
         ],
     )
 

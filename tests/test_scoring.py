@@ -1,12 +1,15 @@
-import pytest
-from trace_eval.scoring import Scorecard, DEFAULT_PROFILE, REQUIRED_JUDGES, compute_scorecard
-from trace_eval.schema import JudgeResult, FrictionFlag
+from trace_eval.schema import FrictionFlag, JudgeResult
+from trace_eval.scoring import compute_scorecard
 
 
 def _make_result(score, scorable=True, confidence="high"):
     return JudgeResult(
-        score=score, confidence=confidence, friction_flags=[],
-        explanation="", raw_metrics={}, scorable=scorable,
+        score=score,
+        confidence=confidence,
+        friction_flags=[],
+        explanation="",
+        raw_metrics={},
+        scorable=scorable,
     )
 
 
@@ -32,8 +35,12 @@ def test_unscorable_optional_redistributes():
         "retrieval": _make_result(70),
         "tool_discipline": _make_result(85),
         "context": JudgeResult(
-            score=None, confidence="low", friction_flags=[],
-            explanation="", raw_metrics={}, scorable=False,
+            score=None,
+            confidence="low",
+            friction_flags=[],
+            explanation="",
+            raw_metrics={},
+            scorable=False,
         ),
     }
     card = compute_scorecard(judges)
@@ -53,8 +60,12 @@ def test_unscorable_required_still_fails():
         "reliability": _make_result(80),
         "efficiency": _make_result(90),
         "retrieval": JudgeResult(
-            score=None, confidence="low", friction_flags=[],
-            explanation="", raw_metrics={}, scorable=False,
+            score=None,
+            confidence="low",
+            friction_flags=[],
+            explanation="",
+            raw_metrics={},
+            scorable=False,
         ),
         "tool_discipline": _make_result(85),
         "context": _make_result(75),
@@ -67,8 +78,12 @@ def test_unscorable_required_still_fails():
     # If reliability is unscorable (required), it should show up
     judges2 = {
         "reliability": JudgeResult(
-            score=None, confidence="low", friction_flags=[],
-            explanation="", raw_metrics={}, scorable=False,
+            score=None,
+            confidence="low",
+            friction_flags=[],
+            explanation="",
+            raw_metrics={},
+            scorable=False,
         ),
         "efficiency": _make_result(90),
         "retrieval": _make_result(70),
@@ -81,13 +96,20 @@ def test_unscorable_required_still_fails():
 
 def test_friction_flags_collected():
     flag = FrictionFlag(
-        id="test", severity="high", dimension="reliability",
-        event_index=None, suggestion="fix it",
+        id="test",
+        severity="high",
+        dimension="reliability",
+        event_index=None,
+        suggestion="fix it",
     )
     judges = {
         "reliability": JudgeResult(
-            score=80, confidence="high", friction_flags=[flag],
-            explanation="", raw_metrics={}, scorable=True,
+            score=80,
+            confidence="high",
+            friction_flags=[flag],
+            explanation="",
+            raw_metrics={},
+            scorable=True,
         ),
         "efficiency": _make_result(90),
         "retrieval": _make_result(70),

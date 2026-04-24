@@ -20,8 +20,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from trace_eval.scoring import Scorecard
 from trace_eval.remediation import RemediationAction
+from trace_eval.scoring import Scorecard
 
 
 def apply_safe_fixes(

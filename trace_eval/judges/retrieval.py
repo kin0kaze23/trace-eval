@@ -8,20 +8,20 @@ from trace_eval.schema import Event, FrictionFlag, JudgeResult
 def judge_retrieval(events: list[Event]) -> JudgeResult:
     if not events:
         return JudgeResult(
-            score=None, confidence="low", friction_flags=[],
-            explanation="No events to evaluate", raw_metrics={}, scorable=False,
+            score=None,
+            confidence="low",
+            friction_flags=[],
+            explanation="No events to evaluate",
+            raw_metrics={},
+            scorable=False,
         )
 
     canonical_entrypoint_used = any(e.retrieval_entrypoint for e in events)
     deprecated_file_touched = any(e.deprecated_file_touched for e in events)
     fallback_search_used = any(
-        e.fallback_search_used or
-        (e.event_type is not None and e.event_type.value == "search_fallback")
-        for e in events
+        e.fallback_search_used or (e.event_type is not None and e.event_type.value == "search_fallback") for e in events
     )
-    retrieval_steps_count = sum(
-        1 for e in events if e.retrieval_steps and len(e.retrieval_steps) > 0
-    )
+    retrieval_steps_count = sum(1 for e in events if e.retrieval_steps and len(e.retrieval_steps) > 0)
 
     # If no retrieval behavior is present at all (no entrypoint, no steps, no
     # deprecated file, no fallback search, and no retrieval-relevant event types),
@@ -33,16 +33,17 @@ def judge_retrieval(events: list[Event]) -> JudgeResult:
         or fallback_search_used
         or retrieval_steps_count > 0
         or any(
-            e.event_type is not None and e.event_type.value in (
-                "search_fallback", "vault_read", "memory_read", "memory_write"
-            )
+            e.event_type is not None
+            and e.event_type.value in ("search_fallback", "vault_read", "memory_read", "memory_write")
             for e in events
         )
     )
 
     if not has_any_retrieval_signal:
         return JudgeResult(
-            score=None, confidence="low", friction_flags=[],
+            score=None,
+            confidence="low",
+            friction_flags=[],
             explanation=(
                 "No retrieval behavior detected in trace. "
                 "Retrieval fields (entrypoint, steps, deprecated file, fallback) are all absent. "
@@ -76,26 +77,38 @@ def judge_retrieval(events: list[Event]) -> JudgeResult:
     # Friction flags
     flags: list[FrictionFlag] = []
     if not canonical_entrypoint_used:
-        flags.append(FrictionFlag(
-            id="retrieval_no_entrypoint", severity="critical",
-            dimension="retrieval", event_index=None,
-            suggestion="Use canonical retrieval entrypoint",
-        ))
+        flags.append(
+            FrictionFlag(
+                id="retrieval_no_entrypoint",
+                severity="critical",
+                dimension="retrieval",
+                event_index=None,
+                suggestion="Use canonical retrieval entrypoint",
+            )
+        )
 
     if deprecated_file_touched:
         dep_idx = next((e.event_index for e in events if e.deprecated_file_touched), None)
-        flags.append(FrictionFlag(
-            id="retrieval_deprecated_file", severity="critical",
-            dimension="retrieval", event_index=dep_idx,
-            suggestion="Stop accessing deprecated files",
-        ))
+        flags.append(
+            FrictionFlag(
+                id="retrieval_deprecated_file",
+                severity="critical",
+                dimension="retrieval",
+                event_index=dep_idx,
+                suggestion="Stop accessing deprecated files",
+            )
+        )
 
     if fallback_search_used:
-        flags.append(FrictionFlag(
-            id="retrieval_fallback_search", severity="high",
-            dimension="retrieval", event_index=None,
-            suggestion="Avoid fallback search -- use primary retrieval",
-        ))
+        flags.append(
+            FrictionFlag(
+                id="retrieval_fallback_search",
+                severity="high",
+                dimension="retrieval",
+                event_index=None,
+                suggestion="Avoid fallback search -- use primary retrieval",
+            )
+        )
 
     return JudgeResult(
         score=score,

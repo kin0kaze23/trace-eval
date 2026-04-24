@@ -1,4 +1,3 @@
-import pytest
 from trace_eval.judges.context import judge_context
 from trace_eval.schema import Event
 

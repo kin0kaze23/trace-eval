@@ -1,7 +1,6 @@
 import json
-import pytest
-from pathlib import Path
-from trace_eval.locate import locate, _is_valid_trace, format_locate
+
+from trace_eval.locate import _is_valid_trace, format_locate
 
 
 def test_is_valid_trace_claude_code(tmp_path):
@@ -43,6 +42,7 @@ def test_format_locate_with_results(tmp_path):
     f = tmp_path / "session.jsonl"
     f.write_text(json.dumps({"type": "user"}) + "\n")
     from trace_eval.locate import TraceLocation
+
     locs = [
         TraceLocation(
             agent_type="claude-code",

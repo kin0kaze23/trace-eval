@@ -7,8 +7,8 @@ from dataclasses import asdict
 from enum import Enum
 from typing import Any
 
-from trace_eval.scoring import Scorecard
 from trace_eval.schema import FrictionFlag
+from trace_eval.scoring import Scorecard
 
 SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3}
 
@@ -31,9 +31,7 @@ SCORE_INTERPRETATION = {
 
 def score_interpretation(score: float) -> str:
     """Return a plain-English interpretation of a score with context."""
-    for (low, high), (label, desc) in sorted(
-        SCORE_INTERPRETATION.items(), key=lambda x: -x[0][0]
-    ):
+    for (low, high), (label, desc) in sorted(SCORE_INTERPRETATION.items(), key=lambda x: -x[0][0]):
         if low <= score < high:
             return f"{label} — {desc}"
     if score >= 100:
@@ -57,18 +55,14 @@ def format_text(card: Scorecard, adapter_report: dict[str, Any] | None = None) -
     lines: list[str] = []
     profile_note = f"  Profile: {card.profile}" if card.profile != "default" else ""
     lines.append("=" * 60)
-    lines.append(
-        f"  TRACE-EVAL SCORECARD  Total: {card.total_score:.1f}/100  [{card.rating}]"
-    )
+    lines.append(f"  TRACE-EVAL SCORECARD  Total: {card.total_score:.1f}/100  [{card.rating}]")
     if profile_note:
         lines.append(profile_note)
     lines.append("=" * 60)
     lines.append("")
 
     # Sort flags by severity for display
-    sorted_flags = sorted(
-        card.all_flags, key=lambda f: SEVERITY_ORDER.get(f.severity, 99)
-    )
+    sorted_flags = sorted(card.all_flags, key=lambda f: SEVERITY_ORDER.get(f.severity, 99))
 
     # Root causes: top critical/high severity flags
     root_causes = [f for f in sorted_flags if f.severity in ("critical", "high")]
@@ -94,9 +88,7 @@ def format_text(card: Scorecard, adapter_report: dict[str, Any] | None = None) -
 
     if card.unscorable_dimensions:
         lines.append("")
-        lines.append(
-            "  * = unscorable dimension — weight redistributed to scorable dimensions"
-        )
+        lines.append("  * = unscorable dimension — weight redistributed to scorable dimensions")
 
     if sorted_flags:
         lines.append("")
@@ -133,7 +125,7 @@ def format_json(
 
     # Build judge_coverage
     judge_coverage: dict[str, dict] = {}
-    for dim, score in card.dimension_scores.items():
+    for dim, _score in card.dimension_scores.items():
         if dim in card.unscorable_dimensions:
             judge_coverage[dim] = {
                 "scorable": False,
@@ -147,13 +139,8 @@ def format_json(
             }
 
     # Build top_issues: top 3 friction flags sorted by severity
-    sorted_flags = sorted(
-        card.all_flags, key=lambda f: SEVERITY_ORDER.get(f.severity, 99)
-    )
-    top_issues = [
-        {"id": f.id, "severity": f.severity, "summary": f.suggestion}
-        for f in sorted_flags[:3]
-    ]
+    sorted_flags = sorted(card.all_flags, key=lambda f: SEVERITY_ORDER.get(f.severity, 99))
+    top_issues = [{"id": f.id, "severity": f.severity, "summary": f.suggestion} for f in sorted_flags[:3]]
 
     # Build top_actions: AUTO-SAFE first, then by confidence, then action_type alphabetically
     if actions:
@@ -223,9 +210,7 @@ def format_summary(card: Scorecard) -> str:
 
     # Line 3: Key weak dimensions (scorable ones that scored < 50)
     weak_dims = [
-        dim
-        for dim in card.scorable_dimensions
-        if (score := card.dimension_scores.get(dim)) is not None and score < 50
+        dim for dim in card.scorable_dimensions if (score := card.dimension_scores.get(dim)) is not None and score < 50
     ]
     if weak_dims:
         dim_strs = [f"{dim}={card.dimension_scores[dim]:.0f}" for dim in weak_dims[:3]]
@@ -291,7 +276,6 @@ def format_session_default(result: dict) -> str:
 
     interpretation = score_interpretation(card.total_score)
     actions = result.get("actions", [])
-    flags = sorted(card.all_flags, key=lambda f: SEVERITY_ORDER.get(f.severity, 9))
 
     # Build problem summary from extracted context
     error_count = 0
@@ -310,9 +294,7 @@ def format_session_default(result: dict) -> str:
     # Problem summary line
     problem_parts = []
     if error_count > 0:
-        problem_parts.append(
-            f"{error_count} command error{'s' if error_count != 1 else ''}"
-        )
+        problem_parts.append(f"{error_count} command error{'s' if error_count != 1 else ''}")
     total_tokens = token_info.get("total_tokens", 0)
     if total_tokens >= 1_000_000:
         problem_parts.append(f"{total_tokens / 1_000_000:.0f}M tokens")
@@ -337,79 +319,6 @@ def format_session_default(result: dict) -> str:
         lines.append("")
         lines.append("More detail: trace-eval --details")
         lines.append("For agents:  trace-eval --json")
-    else:
-        lines.append("No issues detected. Session looks clean.")
-
-    return "\n".join(lines)
-
-    card = result.get("scorecard")
-    if card is None:
-        return "ERROR: No scorecard available"
-
-    interpretation = score_interpretation(card.total_score)
-
-    # Build plain-English problem descriptions from actions
-    actions = result.get("actions", [])
-    flags = sorted(card.all_flags, key=lambda f: SEVERITY_ORDER.get(f.severity, 9))
-
-    # Plain-English problem summary
-    problems: list[str] = []
-
-    # Count errors
-    error_count = 0
-    error_tools: dict[str, int] = {}
-    for f in flags:
-        if f.id == "reliability_errors":
-            # Extract count from suggestion
-            suggestion = f.suggestion
-            # e.g. "Review 46 error(s) at event indices [...]"
-            for word in suggestion.split():
-                if word.rstrip("(),.").isdigit():
-                    error_count = int(word.rstrip("(),."))
-                    break
-            if "tool_args" in result:
-                for t in result.get("tool_errors", {}):
-                    error_tools[t] = result["tool_errors"][t]
-            break
-
-    # Token usage
-    token_info = result.get("token_info", {})
-    tool_count_info = result.get("tool_info", {})
-    retry_info = result.get("retry_info", {})
-
-    lines: list[str] = []
-    lines.append(f"Session — {card.total_score:.1f}/100 ({interpretation})")
-    lines.append("")
-
-    # Problem summary line
-    problem_parts = []
-    if error_count > 0:
-        problem_parts.append(
-            f"{error_count} command error{'s' if error_count != 1 else ''}"
-        )
-    if token_info.get("total_tokens"):
-        total = token_info["total_tokens"]
-        if total >= 1_000_000:
-            problem_parts.append(f"{total / 1_000_000:.0f}M tokens used")
-        elif total >= 1_000:
-            problem_parts.append(f"{total / 1_000:.0f}K tokens used")
-    if tool_count_info.get("total"):
-        problem_parts.append(f"{tool_count_info['total']} tool calls")
-    if retry_info.get("total"):
-        problem_parts.append(f"{retry_info['total']} tool retries")
-
-    if problem_parts:
-        lines.append(" | ".join(problem_parts))
-        lines.append("")
-
-    # Top actions in plain English
-    if actions:
-        lines.append("What to fix:")
-        for i, action in enumerate(actions[:3], 1):
-            lines.append(f"  {i}. {action.description}")
-        lines.append("")
-        lines.append("Detailed report: trace-eval --details")
-        lines.append("Agent mode:     trace-eval --json")
     else:
         lines.append("No issues detected. Session looks clean.")
 
