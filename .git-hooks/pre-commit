@@ -78,6 +78,7 @@ allowed_root_md=(
     "CONTRIBUTING.md"
     "RELEASE_NOTES.md"
     "SECURITY.md"
+    "CLAUDE.md"
 )
 
 check_file() {
