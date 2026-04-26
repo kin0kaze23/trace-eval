@@ -1,254 +1,186 @@
 # trace-eval
 
-> Evaluate AI agent runs. Fix the right thing. See if it improved.
+> Did your AI agent do a good job? Find out in 3 seconds.
 
-A deterministic-first CLI for evaluating AI agent traces. No dashboards, no LLM-as-judge, no cloud dependency. Built for solo builders and small AI-native teams using coding/CLI agents.
+A local-first CLI that scores your AI agent sessions, tells you what went wrong, and recommends what to fix. No dashboards. No API calls. No cloud. Just run a command and get a clear answer.
 
-## Quick Start
+## 30-Second Start
 
 ```bash
 pip install trace-eval
+trace-eval doctor        # first run — checks your setup
+trace-eval loop          # after any agent task — scores it instantly
 ```
 
-### First Run: Check Your Setup
+That's it. One command tells you if your agent session was healthy or needs attention.
 
-```bash
-trace-eval doctor
-```
-
-This confirms your installation, detects which agents you have, finds your trace files, and tells you exactly what to run next.
-
-### Evaluate Your Agent
-
-Once doctor confirms traces are available:
-
-```bash
-trace-eval loop
-```
-
-That's it. `trace-eval loop` finds your most recent agent trace, scores it, identifies the top 3 issues, recommends the top 3 actions, and tells you what's safe to auto-fix.
-
-### When to Use
-
-**Run `trace-eval loop` after any meaningful agent task.**
-
-| When | Example |
-|------|---------|
-| After a meaningful task | Finished a refactor, wrote a feature, fixed a bug |
-| After a failed or frustrating run | Agent got stuck, repeated errors, timed out |
-| Before/after a fix | Compare quality before and after your changes |
-| Before merge in CI | Gate PRs on agent run quality |
-
-**Not the best times:** after every tiny prompt, during casual chat, or mid-tool-call.
-
-### Full Workflow
-
-```bash
-# 0. Verify your setup (first run only)
-trace-eval doctor
-
-# 1. Locate + score your latest agent trace (auto-detects: Claude Code, OpenClaw, Cursor)
-trace-eval loop
-
-# 2. Apply safe fixes automatically
-trace-eval loop --apply-safe
-
-# 3. Compare to a previous run to measure improvement
-trace-eval loop --compare before.jsonl
-
-# 4. Generate a detailed remediation report
-trace-eval loop --report --output ./reports
-```
-
-## The Loop Command
-
-`trace-eval loop` chains the full evaluation pipeline: **locate → convert → score → remediate**. It finds your most recent agent trace, scores it across 5 dimensions, identifies the top 3 issues with severity, recommends the top 3 actions, and optionally applies safe fixes or compares to a baseline.
-
-### Example Output
+## What It Looks Like
 
 ```
 $ trace-eval loop
 ============================================================
-  TRACE-EVAL LOOP  v0.5.0
+  TRACE-EVAL  v0.6.0  |  Score: ✗ 32/100 [Critical]
 ============================================================
 
-  Trace: session_abc123.jsonl (7.8MB, claude-code, just now)
-  Score: 30.0/100  [Critical]
-  TOP 3 ISSUES:
-  [-] reliability_errors (medium) — Review 31 error(s) at event indices [68, 149, ...
-  [-] efficiency_high_tokens (medium) — Reduce token usage with more focused prompts
-  [~] efficiency_high_tool_calls (low) — Excessive tool calls detected
-  NEXT ACTIONS:
-  1. [REQUIRES APPROVAL] Add CI quality gate
-  2. [REQUIRES APPROVAL] Fix command errors
-  3. [AUTO-SAFE] Use appropriate scoring profile
+  a40af304.jsonl (817KB)
+  Claude Code | 46h 23m
+
+  Issues found:
+  ~ Review 5 error(s) at event indices [65, 204, 218, 230, 233]
+  ~ Reduce token usage with more focused prompts
+  . Excessive tool calls detected
+
+  Recommended actions:
+  1. [needs your OK] Add CI quality gate
+  2. [needs your OK] Fix 5 command error(s)
+  3. [auto-fix] Use appropriate scoring profile
 ```
 
-### Closed-Loop Example
+At a glance:
+- **✗ 32/100** — score icon tells you instantly (✓ = good, ~ = fair, ! = poor, ✗ = critical)
+- **Issues found** — what went wrong, in plain English
+- **Recommended actions** — what to do about it, with clear tags for what's auto-fixable
 
-```
-# Bad run diagnosis
-$ trace-eval run examples/hermes_bad.jsonl --summary
-Score: 32.4/100 [Critical]
-Diagnosis: Agent run with significant friction.
+## When to Use It
 
-# Apply safe fixes
-$ trace-eval loop --apply-safe --output ./reports
-...
-  Safe fixes applied: [Add CI quality gate, Switch to coding_agent profile]
+| When | Command |
+|------|---------|
+| After a meaningful agent task | `trace-eval loop` |
+| After a frustrating run (errors, stuck, wasted tokens) | `trace-eval loop` |
+| Before merging a PR | `trace-eval ci --min-score 80` |
+| To compare before/after | `trace-eval loop --compare before.jsonl` |
 
-# Compare to measure improvement
-$ trace-eval compare examples/hermes_bad.jsonl examples/hermes_good.jsonl --summary
-Before: 32.4/100
-After:  98.9/100
-Delta:  +66.5
-Resolved: 7 flags
-```
+## What's a "Trace"?
 
-### Command Reference
+A **trace** is just a recording of everything your AI agent did during a session — every command it ran, every file it read, every error it hit, every token it used. AI agents like Claude Code, Cursor, and OpenClaw automatically save these as you work.
 
-```
-trace-eval loop [agent_type] [options]
+trace-eval reads that recording and tells you:
+- **Did it succeed?** (errors, timeouts)
+- **Was it efficient?** (token usage, tool calls)
+- **What should you fix?** (specific, actionable recommendations)
 
-Positional:
-  agent_type    claude-code, cursor, openclaw, or all (default: all)
+## Integrating with Your AI Agent
 
-Options:
-  --hours N     Search window in hours (default: 48)
-  --profile P   Scoring profile (default: auto-detect)
-  --compare F   Path to previous trace for comparison
-  --apply-safe  Apply safe fixes automatically
-  --report      Generate markdown remediation report
-  --output DIR  Directory for generated files
-  --format F    Output format: text (default) or json
-```
+trace-eval works with any AI agent that saves session traces. Here's how to connect it:
 
-### Machine-Readable Output (`--format json`)
+### Claude Code
 
-For agent consumption, the loop command produces stable JSON:
+Drop this file at the root of your project:
 
-```json
-{
-  "trace": "session_abc123.jsonl",
-  "score": 30.0,
-  "rating": "Critical",
-  "top_issues": [
-    {"id": "reliability_errors", "severity": "medium", "suggestion": "..."}
-  ],
-  "top_actions": [
-    {"label": "Add CI quality gate", "safe_to_automate": true, "requires_approval": true}
-  ],
-  "safe_fixes_applied": ["Add CI quality gate", "Switch to coding_agent profile"],
-  "delta": {"before_score": 72.0, "after_score": 98.9, "delta": 26.9},
-  "report_path": "./reports/session_abc123_report.md"
-}
+```markdown
+# CLAUDE.md — Add trace-eval self-evaluation
+
+After completing any meaningful task, run:
+  trace-eval loop --format json
+
+Read the score and top_actions. If an action has safe_to_automate: true
+and requires_approval: false, run:
+  trace-eval loop --apply-safe
+
+Otherwise, show the user the issues and ask for approval.
 ```
 
-### Agent Self-Check Pattern
+Or just tell Claude Code: *"After each task, run `trace-eval loop` and fix any issues it finds."*
 
-After completing a meaningful task, your agent can self-evaluate:
+### OpenClaw / Cursor / Other Agents
 
-```bash
-trace-eval loop --format json
+Any agent that can run shell commands can use trace-eval the same way. Just add to your project's agent instructions:
+
+> After completing a task, evaluate it with `trace-eval loop`. If the score is below 80, review the recommended actions and fix the top issues before reporting completion.
+
+### CI/CD Quality Gate
+
+Add to your GitHub Actions to block low-quality agent work:
+
+```yaml
+- name: Check agent quality
+  run: trace-eval ci --min-score 80
 ```
 
-The agent reads `score`, `rating`, `top_issues`, and `top_actions` from the output.
-If an action has `safe_to_automate: true` and `requires_approval: false`, the agent can run `trace-eval loop --apply-safe` immediately.
-Otherwise, the agent asks the user for approval before applying changes.
+## Commands You'll Actually Use
 
-### Shell Alias for Daily Use
+| Command | What it does |
+|---------|-------------|
+| `trace-eval loop` | Score your latest agent session |
+| `trace-eval loop --apply-safe` | Auto-fix safe issues |
+| `trace-eval ci --min-score 80` | Quality gate (exits non-zero if too low) |
+| `trace-eval doctor` | Check your setup and find traces |
+| `trace-eval loop --compare before.jsonl` | See if things improved |
 
-Add to your `~/.zshrc` or `~/.bashrc`:
+## Advanced Commands
+
+<details>
+<summary>Full command reference (click to expand)</summary>
+
+| Command | Use case |
+|---------|----------|
+| `trace-eval run trace.jsonl` | Score a specific trace file |
+| `trace-eval run trace.jsonl --next-steps` | Score + remediation suggestions |
+| `trace-eval run trace.jsonl --profile coding_agent` | Use coding-focused scoring |
+| `trace-eval compare before.jsonl after.jsonl` | Before/after comparison |
+| `trace-eval locate` | Find recent agent sessions |
+| `trace-eval convert input.jsonl` | Convert trace formats |
+| `trace-eval validate trace.jsonl` | Check if a trace file is valid |
+| `trace-eval remediate trace.jsonl` | Full remediation report |
+| `trace-eval loop --report --output ./reports` | Generate markdown report |
+
+### Scoring Profiles
+
+| Profile | Best for |
+|---------|----------|
+| `default` | General agent evaluation |
+| `coding_agent` | Coding tasks (weights tool discipline higher, retrieval at 0%) |
+| `rag_agent` | RAG/search-heavy workflows |
+
+### Daily Aliases
 
 ```bash
 alias tev="trace-eval loop"
 alias tevd="trace-eval doctor"
-alias tevj="trace-eval loop --format json"
-alias tevs="trace-eval loop --apply-safe --output ./eval-reports"
+alias tevs="trace-eval loop --apply-safe"
 ```
 
-> Note: Avoid aliasing as `eval` — that's a shell builtin.
+</details>
 
-Then daily usage becomes:
+## Supported Agents
 
-```bash
-tevd         # first run — check your setup
-tev          # after any meaningful task
-tevj         # for agent self-check
-tevs         # apply safe fixes + save reports
-tev --compare before.jsonl  # measure improvement
-```
+| Agent | Auto-detect | Notes |
+|-------|------------|-------|
+| Claude Code | ✅ | Full support |
+| OpenClaw | ✅ | Full support |
+| Cursor | ✅ | Full support |
+| Canonical JSONL | ✅ | Standard format for custom agents |
+| Hermes (SQLite) | ✅ | Direct load |
 
-## Advanced Usage
+Adding a new agent adapter? See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-All `loop` sub-steps are available as standalone commands for manual control or debugging.
+## How Scoring Works
 
-### Manual Commands
+trace-eval scores across 5 dimensions:
 
-| Command | When to Use |
-|---------|-------------|
-| `trace-eval doctor` | First run — diagnose installation and trace availability |
-| `trace-eval run trace.jsonl --summary` | Quick score of a specific trace |
-| `trace-eval run trace.jsonl --next-steps` | Score + remediation suggestions |
-| `trace-eval run trace.jsonl --format json` | Machine-readable output |
-| `trace-eval remediate trace.jsonl` | Full remediation with detailed actions |
-| `trace-eval compare before.jsonl after.jsonl` | Before/after comparison |
-| `trace-eval locate` | Find recent agent traces manually |
-| `trace-eval convert input.jsonl` | Convert non-canonical trace formats |
-| `trace-eval validate trace.jsonl` | Schema validation + field coverage |
-| `trace-eval ci trace.jsonl --min-score 80` | CI gate (exits non-zero below threshold) |
+| Dimension | What it measures |
+|-----------|-----------------|
+| Reliability | Did it succeed? Errors, timeouts, partial results |
+| Efficiency | Token usage, cost, tool call density |
+| Retrieval | Did it find the right files efficiently? |
+| Tool Discipline | Retries, redundant calls, timeouts |
+| Context | Context pressure, warnings, compression |
 
-### Scoring Profiles
-
-| Profile | Reliability | Efficiency | Retrieval | Tool Discipline | Context |
-|---------|------------|------------|-----------|-----------------|---------|
-| **default** | 35% | 20% | 20% | 15% | 10% |
-| **coding_agent** | 40% | 25% | 0% | 25% | 10% |
-| **rag_agent** | 30% | 15% | 30% | 15% | 10% |
-
-```bash
-trace-eval run trace.jsonl --profile coding_agent
-```
-
-### Scoring Dimensions
-
-| Dimension | Weight | What It Measures |
-|-----------|--------|-----------------|
-| Reliability | 35% | Did it succeed? Errors, timeouts, partial results |
-| Efficiency | 20% | Token usage, cost, tool call density |
-| Retrieval | 20% | Canonical entrypoint, deprecated files, fallback search |
-| Tool Discipline | 15% | Retries, redundant calls, timeouts |
-| Context | 10% | Context pressure, warnings, compression events |
-
-Weights are configurable via profiles. Unscorable dimensions redistribute proportionally.
-
-## Supported Formats
-
-| Format | Auto-detect | Adapter |
-|--------|------------|---------|
-| Claude Code | Yes | Full |
-| OpenClaw | Yes | Full |
-| Cursor | Yes | Full |
-| Canonical JSONL | Yes (passthrough) | Full |
-| Hermes SQLite | N/A (load directly) | Honest/lossy |
-
-## Real Traces Evaluated
-
-| Trace | Source | Events | Score | Top Issue |
-|-------|--------|--------|-------|-----------|
-| Bad run (synthetic) | Modeled after Hermes | 11 | 32.4 | No retrieval, 3 errors, context pressure |
-| Good run (synthetic) | Modeled after Hermes | 8 | 98.9 | All clear |
-| Claude Code (real) | Stillness project | 3,694 | 28.3 | 90 tool errors, high token usage |
-| OpenClaw (real) | Real session | 158 | 42.6 | 11 errors, zero reliability |
-
-See [examples/case_study.md](examples/case_study.md) for a complete walkthrough with the `loop` workflow.
+All scoring is **deterministic** — same trace always gets the same score. No LLM calls, no randomness, no cloud API.
 
 ## What This Is NOT
 
-- A dashboard — CLI-first, local-first
-- An LLM judge — all scoring is deterministic
-- An auto-fix tool — it tells you what to fix; `--apply-safe` only applies vetted safe fixes
-- A broad observability platform — focused on agent trace evaluation
+- ❌ A dashboard — CLI-first, local-first
+- ❌ An LLM judge — all scoring is rule-based and reproducible
+- ❌ An auto-fix tool — it tells you what to fix; `--apply-safe` only applies vetted safe fixes
+- ❌ A broad observability platform — focused on agent session evaluation
+
+## Docs
+
+- [Architecture](docs/ARCHITECTURE.md) — how it works under the hood
+- [Troubleshooting](docs/TROUBLESHOOTING.md) — common issues and fixes
+- [CI Integration](docs/CI_INTEGRATION.md) — using trace-eval in CI/CD pipelines
+- [Contributing](CONTRIBUTING.md) — how to add adapters, judges, or features
 
 ## License
 
