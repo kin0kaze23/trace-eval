@@ -1,5 +1,17 @@
 # Project Rules: trace-eval
 
+## Strategic Context (read first)
+
+This repo is one of three products in the AI Workstation Suite (Pulse · trace-eval · agent-ready). Before any non-trivial work, read the suite-level strategy at:
+
+`/Users/jonathannugroho/Developer/PersonalProjects/AI_WORKSTATION_SUITE.md`
+
+Your product's specific role: **§5.2 — trace-eval: every session, scored, plain-English.** Deterministic scoring · MCP server · passive file-watcher · plain-English issues. Read-only by design (no destructive operations).
+
+When the strategy and this file conflict, the strategy doc wins for vision and direction; this file wins for repo-local execution rules.
+
+---
+
 After completing any meaningful task, always evaluate your work with trace-eval before reporting completion.
 
 ## How to use

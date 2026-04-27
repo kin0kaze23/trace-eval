@@ -50,9 +50,9 @@ At a glance:
 | Before merging a PR | `trace-eval ci --min-score 80` |
 | To compare before/after | `trace-eval loop --compare before.jsonl` |
 
-## What's a "Trace"?
+## What's a "Session Recording"?
 
-A **trace** is just a recording of everything your AI agent did during a session — every command it ran, every file it read, every error it hit, every token it used. AI agents like Claude Code, Cursor, and OpenClaw automatically save these as you work.
+A **session recording** is just a log of everything your AI agent did — every command it ran, every file it read, every error it hit, every token it used. AI agents like Claude Code, Cursor, and OpenClaw automatically save these as you work.
 
 trace-eval reads that recording and tells you:
 - **Did it succeed?** (errors, timeouts)
@@ -104,7 +104,7 @@ Add to your GitHub Actions to block low-quality agent work:
 | `trace-eval loop` | Score your latest agent session |
 | `trace-eval loop --apply-safe` | Auto-fix safe issues |
 | `trace-eval ci --min-score 80` | Quality gate (exits non-zero if too low) |
-| `trace-eval doctor` | Check your setup and find traces |
+| `trace-eval doctor` | Check your setup and find sessions |
 | `trace-eval loop --compare before.jsonl` | See if things improved |
 
 ## Advanced Commands
@@ -114,19 +114,19 @@ Add to your GitHub Actions to block low-quality agent work:
 
 | Command | Use case |
 |---------|----------|
-| `trace-eval run trace.jsonl` | Score a specific trace file |
+| `trace-eval run trace.jsonl` | Score a specific session file |
 | `trace-eval run trace.jsonl --next-steps` | Score + remediation suggestions |
 | `trace-eval run trace.jsonl --profile coding_agent` | Use coding-focused scoring |
 | `trace-eval compare before.jsonl after.jsonl` | Before/after comparison |
 | `trace-eval locate` | Find recent agent sessions |
-| `trace-eval convert input.jsonl` | Convert trace formats |
-| `trace-eval validate trace.jsonl` | Check if a trace file is valid |
+| `trace-eval convert input.jsonl` | Convert session formats |
+| `trace-eval validate trace.jsonl` | Check if a session file is valid |
 | `trace-eval remediate trace.jsonl` | Full remediation report |
 | `trace-eval loop --report --output ./reports` | Generate markdown report |
 
-### Scoring Profiles
+### Scoring Presets
 
-| Profile | Best for |
+| Preset | Best for |
 |---------|----------|
 | `default` | General agent evaluation |
 | `coding_agent` | Coding tasks (weights tool discipline higher, retrieval at 0%) |
@@ -152,13 +152,13 @@ alias tevs="trace-eval loop --apply-safe"
 | Canonical JSONL | ✅ | Standard format for custom agents |
 | Hermes (SQLite) | ✅ | Direct load |
 
-Adding a new agent adapter? See [CONTRIBUTING.md](CONTRIBUTING.md).
+Adding a new agent connector? See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## How Scoring Works
 
-trace-eval scores across 5 dimensions:
+trace-eval scores across 5 score areas:
 
-| Dimension | What it measures |
+| Score Area | What it measures |
 |-----------|-----------------|
 | Reliability | Did it succeed? Errors, timeouts, partial results |
 | Efficiency | Token usage, cost, tool call density |
@@ -166,7 +166,7 @@ trace-eval scores across 5 dimensions:
 | Tool Discipline | Retries, redundant calls, timeouts |
 | Context | Context pressure, warnings, compression |
 
-All scoring is **deterministic** — same trace always gets the same score. No LLM calls, no randomness, no cloud API.
+All scoring is **deterministic** — same session always gets the same score. No LLM calls, no randomness, no cloud API.
 
 ## What This Is NOT
 
@@ -180,7 +180,7 @@ All scoring is **deterministic** — same trace always gets the same score. No L
 - [Architecture](docs/ARCHITECTURE.md) — how it works under the hood
 - [Troubleshooting](docs/TROUBLESHOOTING.md) — common issues and fixes
 - [CI Integration](docs/CI_INTEGRATION.md) — using trace-eval in CI/CD pipelines
-- [Contributing](CONTRIBUTING.md) — how to add adapters, judges, or features
+- [Contributing](CONTRIBUTING.md) — how to add connectors, checkers, or features
 
 ## License
 

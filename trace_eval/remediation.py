@@ -47,8 +47,8 @@ ACTION_TYPES = {
         "requires_approval": True,
     },
     "switch_profile": {
-        "label": "Use appropriate scoring profile",
-        "description": "Switch to 'coding_agent' profile if retrieval is not applicable to your workflow.",
+        "label": "Use appropriate scoring preset",
+        "description": "Switch to 'coding_agent' preset if retrieval is not applicable to your workflow.",
         "confidence": "high",
         "safe_to_automate": True,
         "requires_approval": False,
@@ -69,13 +69,13 @@ ACTION_TYPES = {
     },
     "add_ci_gate": {
         "label": "Add CI quality gate",
-        "description": "Add trace-eval CI gate to prevent low-quality agent runs from being merged.",
+        "description": "Add trace-eval CI gate to prevent low-quality agent sessions from being merged.",
         "confidence": "high",
         "safe_to_automate": True,
         "requires_approval": True,
     },
     "install_capability": {
-        "label": "Install missing capability",
+        "label": "Install missing tool",
         "description": "A required tool is not installed in the environment.",
         "confidence": "high",
         "safe_to_automate": False,
@@ -261,7 +261,7 @@ def _analyze_rules(card: Scorecard, events: list[Event] | None) -> list[Remediat
         actions.append(
             RemediationAction(
                 action_type="install_capability",
-                label=f"Install missing capability: {cap_id}",
+                label=f"Install missing tool: {cap_id}",
                 description=f"Detected '{trigger}' in trace. Run: {suggested_cmd}",
                 confidence=ACTION_TYPES["install_capability"]["confidence"],
                 safe_to_automate=ACTION_TYPES["install_capability"]["safe_to_automate"],

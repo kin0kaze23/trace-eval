@@ -51,7 +51,7 @@ def _check_agent_directory(agent: str) -> dict:
     return {
         "agent": agent,
         "status": "found",
-        "message": f"{len(traces)} trace(s) found in last 48h",
+        "message": f"{len(traces)} session(s) found in last 48h",
         "trace_count": len(traces),
         "path": base_dir,
         "recent_traces": [

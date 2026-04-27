@@ -77,7 +77,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         else:
             print(f"  {field_name:30s} {pct:5.0f}% [####################]")
 
-    print("\nAdapter capability report:")
+    print("\nConnector capability report:")
     for key, val in report.items():
         print(f"  {key}: {val}")
 
@@ -484,7 +484,7 @@ def cmd_loop(args: argparse.Namespace) -> int:
 def main():
     parser = argparse.ArgumentParser(
         prog="trace-eval",
-        description="Evaluate your latest AI agent session. Run with no arguments to score the most recent trace.",
+        description="Evaluate your latest AI agent session. Run with no arguments to score the most recent session.",
     )
     parser.add_argument(
         "--version",
@@ -514,12 +514,12 @@ def main():
     sub = parser.add_subparsers(dest="command", required=False)
 
     # validate
-    p_validate = sub.add_parser("validate", help="Check if a trace file is valid and well-formed")
-    p_validate.add_argument("trace", help="Path to trace file (.jsonl or .db)")
+    p_validate = sub.add_parser("validate", help="Check if a session file is valid and well-formed")
+    p_validate.add_argument("trace", help="Path to session file (.jsonl or .db)")
 
     # run
-    p_run = sub.add_parser("run", help="Score a specific trace file")
-    p_run.add_argument("trace", help="Path to trace file")
+    p_run = sub.add_parser("run", help="Score a specific session file")
+    p_run.add_argument("trace", help="Path to session file")
     p_run.add_argument(
         "--format",
         choices=["text", "json"],
@@ -530,7 +530,7 @@ def main():
         "--profile",
         choices=list(PROFILES.keys()),
         default=None,
-        help="Scoring profile (default: auto-detect from trace)",
+        help="Scoring preset (default: auto-detect from session)",
     )
     p_run.add_argument(
         "--summary",
@@ -544,9 +544,9 @@ def main():
     )
 
     # compare
-    p_compare = sub.add_parser("compare", help="Compare scores between two trace files")
-    p_compare.add_argument("before", help="Path to before trace")
-    p_compare.add_argument("after", help="Path to after trace")
+    p_compare = sub.add_parser("compare", help="Compare scores between two session files")
+    p_compare.add_argument("before", help="Path to earlier session")
+    p_compare.add_argument("after", help="Path to later session")
     p_compare.add_argument(
         "--format",
         choices=["text", "json"],
@@ -557,14 +557,14 @@ def main():
 
     # ci
     p_ci = sub.add_parser("ci", help="Quality gate for CI/CD pipelines (fails if score too low)")
-    p_ci.add_argument("trace", help="Path to trace file")
+    p_ci.add_argument("trace", help="Path to session file")
     p_ci.add_argument("--min-score", type=float, default=80, help="Minimum total score (default: 80)")
     p_ci.add_argument(
         "--min-dimension",
         action="append",
         help="Per-dimension threshold (e.g., reliability=90)",
     )
-    p_ci.add_argument("--allow-partial", action="store_true", help="Allow unscorable judges")
+    p_ci.add_argument("--allow-partial", action="store_true", help="Allow unscorable checkers")
     p_ci.add_argument(
         "--format",
         choices=["text", "json"],
@@ -575,18 +575,18 @@ def main():
         "--profile",
         choices=list(PROFILES.keys()),
         default=None,
-        help="Scoring profile (default: auto-detect from trace)",
+        help="Scoring preset (default: auto-detect from session)",
     )
 
     # convert
-    p_convert = sub.add_parser("convert", help="Convert agent traces to standard format")
-    p_convert.add_argument("input", help="Path to trace file to convert")
+    p_convert = sub.add_parser("convert", help="Convert agent sessions to standard format")
+    p_convert.add_argument("input", help="Path to session file to convert")
     p_convert.add_argument(
         "format_type",
         nargs="?",
         default=None,
         choices=["claude-code", "openclaw", "cursor"],
-        help="Trace format (auto-detected if omitted)",
+        help="Session format (auto-detected if omitted)",
     )
     p_convert.add_argument("-o", "--output", help="Output path (default: <input>_canonical.jsonl)")
 
@@ -613,8 +613,8 @@ def main():
 
     # remediate
     p_remediate = sub.add_parser("remediate", help="Get actionable recommendations to improve agent quality")
-    p_remediate.add_argument("trace", help="Path to trace file")
-    p_remediate.add_argument("--profile", choices=list(PROFILES.keys()), default=None, help="Scoring profile")
+    p_remediate.add_argument("trace", help="Path to session file")
+    p_remediate.add_argument("--profile", choices=list(PROFILES.keys()), default=None, help="Scoring preset")
     p_remediate.add_argument("--apply-safe", action="store_true", help="Apply safe fixes automatically")
     p_remediate.add_argument(
         "--report",
@@ -636,9 +636,9 @@ def main():
         "--profile",
         choices=list(PROFILES.keys()),
         default=None,
-        help="Scoring profile (default: auto-detect)",
+        help="Scoring preset (default: auto-detect)",
     )
-    p_loop.add_argument("--compare", help="Path to previous trace for comparison")
+    p_loop.add_argument("--compare", help="Path to previous session for comparison")
     p_loop.add_argument("--apply-safe", action="store_true", help="Apply safe fixes automatically")
     p_loop.add_argument("--report", action="store_true", help="Generate markdown remediation report")
     p_loop.add_argument("--output", help="Directory for generated files")
