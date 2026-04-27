@@ -110,7 +110,7 @@ def test_validate_good(tmp_path):
 def test_run_text(tmp_path):
     trace = _make_trace(tmp_path, "good", GOOD_LINES)
     result = _run(["run", str(trace)])
-    assert "SCORECARD" in result.stdout
+    assert "SESSION SCORE" in result.stdout
 
 
 def test_run_json(tmp_path):

@@ -53,11 +53,11 @@ def compute_rating(score: float) -> ScoreRating:
 
 def format_text(card: Scorecard, adapter_report: dict[str, Any] | None = None) -> str:
     lines: list[str] = []
-    profile_note = f"  Profile: {card.profile}" if card.profile != "default" else ""
+    preset_note = f"  Preset: {card.profile}" if card.profile != "default" else ""
     lines.append("=" * 60)
-    lines.append(f"  TRACE-EVAL SCORECARD  Total: {card.total_score:.1f}/100  [{card.rating}]")
-    if profile_note:
-        lines.append(profile_note)
+    lines.append(f"  TRACE-EVAL SESSION SCORE  Total: {card.total_score:.1f}/100  [{card.rating}]")
+    if preset_note:
+        lines.append(preset_note)
     lines.append("=" * 60)
     lines.append("")
 
@@ -72,7 +72,7 @@ def format_text(card: Scorecard, adapter_report: dict[str, Any] | None = None) -
             lines.append(f"  - {flag.suggestion}")
         lines.append("")
 
-    lines.append("DIMENSION SCORES:")
+    lines.append("SCORE AREAS:")
     for dim, score in card.dimension_scores.items():
         conf = card.dimension_confidence.get(dim, "")
         if dim in card.unscorable_dimensions:
@@ -88,11 +88,11 @@ def format_text(card: Scorecard, adapter_report: dict[str, Any] | None = None) -
 
     if card.unscorable_dimensions:
         lines.append("")
-        lines.append("  * = unscorable dimension — weight redistributed to scorable dimensions")
+        lines.append("  * = unscorable score area — weight redistributed to scorable areas")
 
     if sorted_flags:
         lines.append("")
-        lines.append("FRICTION FLAGS (sorted by severity):")
+        lines.append("ISSUES (sorted by severity):")
         for flag in sorted_flags:
             severity_tag = f"[{flag.severity.upper()}]"
             idx = f" @event {flag.event_index}" if flag.event_index is not None else ""
@@ -101,7 +101,7 @@ def format_text(card: Scorecard, adapter_report: dict[str, Any] | None = None) -
 
     if adapter_report:
         lines.append("")
-        lines.append("ADAPTER CAPABILITY REPORT:")
+        lines.append("CONNECTOR CAPABILITIES:")
         for key, val in adapter_report.items():
             lines.append(f"  {key}: {val}")
 
