@@ -6,6 +6,18 @@ A local-first CLI that scores your AI agent sessions, tells you what went wrong,
 
 ## 30-Second Start
 
+### Option A: Standalone binary (no Python required)
+
+Download the single executable (8.9 MB, macOS arm64):
+
+```bash
+curl -fsSL https://github.com/kin0kaze23/trace-eval/releases/latest/download/trace-eval -o /usr/local/bin/trace-eval
+chmod +x /usr/local/bin/trace-eval
+trace-eval doctor
+```
+
+### Option B: pip install (requires Python 3.11+)
+
 ```bash
 pip install trace-eval
 trace-eval doctor        # first run — checks your setup
