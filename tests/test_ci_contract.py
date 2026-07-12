@@ -118,8 +118,31 @@ class TestCILatestOption:
             or "locate" in result.stderr.lower()
         )
 
-    def test_hours_without_latest_fails(self, tmp_path):
+    def test_hours_48_with_explicit_path_fails(self, tmp_path):
+        """--hours 48 with explicit path must fail (even though 48 is the default)."""
+        trace = _make_trace(tmp_path, "good", GOOD_LINES)
+        result = _run(["ci", str(trace), "--hours", "48", "--min-score", "0"])
+        assert result.returncode != 0
+        assert "--hours is only valid with --latest" in result.stderr
+
+    def test_hours_168_with_explicit_path_fails(self, tmp_path):
+        """--hours 168 with explicit path must fail."""
         trace = _make_trace(tmp_path, "good", GOOD_LINES)
         result = _run(["ci", str(trace), "--hours", "168", "--min-score", "0"])
         assert result.returncode != 0
         assert "--hours is only valid with --latest" in result.stderr
+
+    def test_latest_with_hours_48_passes_validation(self):
+        """--latest --hours 48 should pass --hours validation (may fail on no sessions)."""
+        result = _run(["ci", "--latest", "--hours", "48", "--min-score", "80"])
+        assert "--hours is only valid with --latest" not in result.stderr
+
+    def test_latest_with_hours_168_passes_validation(self):
+        """--latest --hours 168 should pass --hours validation."""
+        result = _run(["ci", "--latest", "--hours", "168", "--min-score", "80"])
+        assert "--hours is only valid with --latest" not in result.stderr
+
+    def test_latest_without_hours_uses_default(self):
+        """--latest without --hours should work (uses default 48)."""
+        result = _run(["ci", "--latest", "--min-score", "80"])
+        assert "--hours is only valid with --latest" not in result.stderr
