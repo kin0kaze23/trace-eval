@@ -29,9 +29,10 @@ def judge_efficiency(events: list[Event]) -> JudgeResult:
     # not missing tool-call telemetry.
     has_token_data = any(e.tokens_in is not None or e.tokens_out is not None for e in events)
     has_cost_data = any(e.cost_estimate is not None for e in events)
-    # Tool-call telemetry is "observed" if the trace contains any events
-    # at all (the absence of tool_call events means zero observed calls).
-    has_tool_calls = len(events) > 0
+    # Tool-call observability: for canonical traces, the absence of tool_call
+    # events is interpreted as an observed count of zero, not missing telemetry.
+    # This means any non-empty trace has observed tool-call data.
+    has_tool_call_observability = len(events) > 0
     has_latency = any(e.latency_ms is not None for e in events)
 
     # Compute observed values
@@ -55,12 +56,12 @@ def judge_efficiency(events: list[Event]) -> JudgeResult:
         cost_sub = max(0, 100 - cost_estimate * 100)
         score += COST_WEIGHT * cost_sub
 
-    if has_tool_calls:
+    if has_tool_call_observability:
         tool_density_sub = max(0, 100 - tool_call_count * 2)
         score += TOOL_DENSITY_WEIGHT * tool_density_sub
 
     # If no efficiency metrics are available at all, the judge is not scorable
-    if not has_token_data and not has_cost_data and not has_tool_calls:
+    if not has_token_data and not has_cost_data and not has_tool_call_observability:
         return JudgeResult(
             score=None,
             confidence="low",
@@ -69,7 +70,7 @@ def judge_efficiency(events: list[Event]) -> JudgeResult:
             raw_metrics={
                 "has_token_data": False,
                 "has_cost_data": False,
-                "has_tool_calls": False,
+                "has_tool_call_observability": False,
                 "has_latency": False,
             },
             scorable=False,
@@ -82,7 +83,7 @@ def judge_efficiency(events: list[Event]) -> JudgeResult:
     score = max(0.0, min(100.0, score))
 
     # Confidence: high if all metrics present, medium if partial
-    all_metrics = [has_token_data, has_cost_data, has_tool_calls]
+    all_metrics = [has_token_data, has_cost_data, has_tool_call_observability]
     observed_count = sum(all_metrics)
     if observed_count == 3:
         confidence = "high"
@@ -95,7 +96,7 @@ def judge_efficiency(events: list[Event]) -> JudgeResult:
     coverage = {
         "has_token_data": has_token_data,
         "has_cost_data": has_cost_data,
-        "has_tool_calls": has_tool_calls,
+        "has_tool_call_observability": has_tool_call_observability,
         "has_latency": has_latency,
     }
 
@@ -121,7 +122,7 @@ def judge_efficiency(events: list[Event]) -> JudgeResult:
                 suggestion="Cost exceeded $1 — consider cheaper model",
             )
         )
-    if has_tool_calls and tool_call_count > 25:
+    if has_tool_call_observability and tool_call_count > 25:
         flags.append(
             FrictionFlag(
                 id="efficiency_high_tool_calls",

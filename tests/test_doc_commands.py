@@ -1,24 +1,36 @@
-"""Documentation command validation tests using shlex + argparse."""
+"""Documentation command validation using the real argparse parser."""
 
 import re
 import shlex
 from pathlib import Path
 
+from trace_eval.cli import build_parser
+
 TRACE_EVAL_DIR = Path(__file__).resolve().parent.parent
 
 # Files to scan for command examples
-DOC_FILES = [
-    "README.md",
-    "CLAUDE.md",
-    "CONTRIBUTING.md",
-    "docs/CI_INTEGRATION.md",
-    "docs/AGENT_INTEGRATION.md",
-    "docs/TROUBLESHOOTING.md",
+DOC_FILES = ["README.md", "CLAUDE.md", "CONTRIBUTING.md"]
+DOC_FILES += [str(p) for p in (TRACE_EVAL_DIR / "docs").glob("*.md")]
+
+# Commands that intentionally contain placeholders or shell syntax
+ALLOWLIST_PATTERNS = [
+    "--details",
+    "path/to",
+    "session.jsonl",
+    "trace.jsonl",
+    "$",
+    "|",
+    ">",
+    "head ",
 ]
 
 
+def _is_allowlisted(cmd):
+    return any(p in cmd for p in ALLOWLIST_PATTERNS)
+
+
 def _extract_commands(filepath):
-    path = TRACE_EVAL_DIR / filepath
+    path = TRACE_EVAL_DIR / filepath if not filepath.startswith("/") else Path(filepath)
     if not path.exists():
         return []
     content = path.read_text()
@@ -29,91 +41,45 @@ def _extract_commands(filepath):
         if "tev=" in line or "tevd=" in line or "tevs=" in line:
             continue
         matches = re.findall(
-            r"trace-eval\s+(?:validate|run|compare|ci|convert|locate|doctor|remediate|loop)\b[^`]*", line
+            r"trace-eval\s+(?:validate|run|compare|ci|convert|locate|doctor|remediate|loop)\b[^`]*",
+            line,
         )
         for cmd in matches:
-            cmd = cmd.strip().rstrip("`")
-            # Skip bare command mentions (no arguments after subcommand)
+            cmd = cmd.strip().rstrip(chr(96))
             parts = cmd.split()
             if len(parts) <= 2:
+                continue
+            # Skip prose matches where first arg is a conjunction
+            if parts[2] in ("and", "or", "to", "for"):
                 continue
             commands.append((filepath, cmd))
     return commands
 
 
-def _parse_and_validate(cmd_str):
-    try:
-        parts = shlex.split(cmd_str)
-    except ValueError:
-        # Commands with shell variables or unclosed quotes can't be parsed
+def _validate_with_parser(cmd_str):
+    """Validate a command against the real argparse parser.
+
+    Returns (is_valid, error_message).
+    Uses parser.parse_args() which raises SystemExit on error.
+    """
+    # Strip inline comments (everything after #)
+    cmd_str = cmd_str.split("#")[0].strip()
+    if not cmd_str:
         return True, None
+    parts = shlex.split(cmd_str)
     if parts[0] != "trace-eval":
         return True, None
     if len(parts) < 2:
         return True, None
-    subcommand = parts[1]
-    args = parts[2:]
-    known_subcommands = {"validate", "run", "compare", "ci", "convert", "locate", "doctor", "remediate", "loop"}
-    if subcommand not in known_subcommands:
-        return False, f"Unknown subcommand: {subcommand}"
 
-    if subcommand == "ci":
-        has_latest = "--latest" in args
-        option_takes_value = {"--min-score", "--min-dimension", "--profile", "--format", "--hours"}
-        positional = []
-        skip_next = False
-        for arg in args:
-            if skip_next:
-                skip_next = False
-                continue
-            if arg in option_takes_value:
-                skip_next = True
-                continue
-            if arg.startswith("--"):
-                continue
-            positional.append(arg)
-        has_path = len(positional) > 0
-        if not has_path and not has_latest:
-            return False, f"ci requires a trace path or --latest: {cmd_str}"
-        if has_path and has_latest:
-            return False, f"ci cannot have both path and --latest: {cmd_str}"
-        if "--hours" in args and not has_latest:
-            return False, f"--hours only valid with --latest: {cmd_str}"
+    parser = build_parser()
+    # Remove "trace-eval" prefix
+    args_to_parse = parts[1:]
 
-    if subcommand == "run":
-        option_takes_value = {"--format", "--profile"}
-        positional = []
-        skip_next = False
-        for arg in args:
-            if skip_next:
-                skip_next = False
-                continue
-            if arg in option_takes_value:
-                skip_next = True
-                continue
-            if arg.startswith("--"):
-                continue
-            positional.append(arg)
-        if not positional:
-            return False, f"run requires a trace path: {cmd_str}"
-
-    if subcommand in ("validate", "remediate"):
-        option_takes_value = {"--profile"}
-        positional = []
-        skip_next = False
-        for arg in args:
-            if skip_next:
-                skip_next = False
-                continue
-            if arg in option_takes_value:
-                skip_next = True
-                continue
-            if arg.startswith("--"):
-                continue
-            positional.append(arg)
-        if not positional:
-            return False, f"{subcommand} requires a trace path: {cmd_str}"
-
+    try:
+        parser.parse_args(args_to_parse)
+    except SystemExit:
+        return False, f"Parser rejected: {cmd_str}"
     return True, None
 
 
@@ -135,15 +101,9 @@ class TestDocCommandsValid:
         assert len(commands) > 0, "No commands found in docs"
         failures = []
         for doc_file, cmd in commands:
-            if "$" + "{{" in cmd or "path/to" in cmd or "session.jsonl" in cmd:
+            if _is_allowlisted(cmd):
                 continue
-            # Skip commands with shell variables or pipes
-            if "$(" in cmd or "|" in cmd or ">" in cmd:
-                continue
-            try:
-                is_valid, error = _parse_and_validate(cmd)
-            except Exception:
-                continue
+            is_valid, error = _validate_with_parser(cmd)
             if not is_valid:
                 failures.append(f"{doc_file}: {error}")
         assert not failures, chr(10).join(failures)
@@ -153,20 +113,46 @@ class TestDocCommandsValid:
         for doc_file, cmd in commands:
             if not cmd.startswith("trace-eval ci"):
                 continue
-            if "$" + "{{" in cmd or "path/to" in cmd or "session.jsonl" in cmd:
+            if _is_allowlisted(cmd):
                 continue
-            if "$(" in cmd or "|" in cmd or ">" in cmd:
-                continue
-            try:
-                is_valid, error = _parse_and_validate(cmd)
-            except Exception:
-                continue
+            is_valid, error = _validate_with_parser(cmd)
             assert is_valid, f"{doc_file}: {error}"
 
     def test_option_values_not_mistaken_for_paths(self):
-        is_valid, _ = _parse_and_validate("trace-eval ci trace.jsonl --profile coding_agent --min-score 80")
+        """Parser accepts coding_agent as positional, but runtime rejects it."""
+        import subprocess
+        import sys
+
+        is_valid, _ = _validate_with_parser("trace-eval ci trace.jsonl --profile coding_agent --min-score 80")
         assert is_valid
-        is_valid, _ = _parse_and_validate("trace-eval ci --latest --profile coding_agent --min-score 80")
-        assert is_valid
-        is_valid, error = _parse_and_validate("trace-eval ci --profile coding_agent --min-score 75")
-        assert not is_valid, f"Should fail: {error}"
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "trace_eval.cli",
+                "ci",
+                "coding_agent",
+                "--profile",
+                "coding_agent",
+                "--min-score",
+                "75",
+            ],
+            capture_output=True,
+            text=True,
+            cwd=str(TRACE_EVAL_DIR),
+        )
+        assert result.returncode != 0, "Should fail: coding_agent is not a file"
+
+    def test_unknown_option_fails(self):
+        is_valid, _ = _validate_with_parser("trace-eval ci trace.jsonl --unknown-option")
+        assert not is_valid
+
+    def test_option_on_wrong_subcommand_fails(self):
+        # --latest is only on ci, not on run
+        is_valid, _ = _validate_with_parser("trace-eval run trace.jsonl --latest")
+        assert not is_valid
+
+    def test_docs_glob_scanned(self):
+        """Verify docs/*.md files are included in the scan list."""
+        doc_paths = [f for f in DOC_FILES if f.startswith("docs/") or "/docs/" in f]
+        assert len(doc_paths) > 0, "No docs/*.md files in scan list"

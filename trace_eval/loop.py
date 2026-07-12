@@ -173,7 +173,7 @@ def run_loop(
         # Step 5: Apply-safe (if flagged)
         if apply_safe:
             try:
-                fixes = apply_safe_fixes(actions, card, Path(canonical_path))
+                fixes = apply_safe_fixes(actions, card, Path(trace_path))
                 result["safe_fixes_applied"] = fixes
             except Exception as e:
                 result.setdefault("_warnings", []).append(f"apply_safe failed: {e}")
@@ -204,7 +204,7 @@ def run_loop(
                     report_out = Path(output_dir) / f"{Path(trace_path).stem}_report.md"
                 else:
                     report_out = None
-                report_path = generate_remediation_report(actions, card, Path(canonical_path), output_path=report_out)
+                report_path = generate_remediation_report(actions, card, Path(trace_path), output_path=report_out)
                 result["report_path"] = report_path
             except Exception as e:
                 result.setdefault("_warnings", []).append(f"Report generation failed: {e}")

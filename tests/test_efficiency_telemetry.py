@@ -46,7 +46,7 @@ class TestMissingTelemetry:
         assert result.score is not None
         assert result.raw_metrics["has_token_data"] is False
         assert result.raw_metrics["has_cost_data"] is False
-        assert result.raw_metrics["has_tool_calls"] is True
+        assert result.raw_metrics["has_tool_call_observability"] is True
         assert result.raw_metrics["tool_call_count"] == 0
 
     def test_missing_tokens_not_treated_as_zero(self):
@@ -60,7 +60,7 @@ class TestMissingTelemetry:
         assert result.score < 100
         assert result.confidence == "medium"
         assert result.raw_metrics["has_token_data"] is False
-        assert result.raw_metrics["has_tool_calls"] is True
+        assert result.raw_metrics["has_tool_call_observability"] is True
 
     def test_missing_telemetry_not_treated_as_zero(self):
         """Missing telemetry should not be treated as observed zero."""
@@ -190,7 +190,7 @@ class TestTelemetryMonotonicity:
         ]
         result = judge_efficiency(events)
         assert result.scorable
-        assert result.raw_metrics["has_tool_calls"] is True
+        assert result.raw_metrics["has_tool_call_observability"] is True
         assert result.raw_metrics["tool_call_count"] == 0
         # tool_density_sub = max(0, 100 - 0*2) = 100
         # score = 0.4 * token_sub + 0.3 * cost_sub + 0.3 * 100

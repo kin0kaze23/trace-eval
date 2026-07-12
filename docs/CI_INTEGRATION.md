@@ -13,7 +13,7 @@ Add this step to your GitHub Actions workflow:
     trace-eval ci path/to/session.jsonl --min-score 80
 ```
 
-This auto-locates the most recent agent trace, scores it, and fails the job if the score is below 80.
+This evaluates the supplied session file and fails the job if the score is below 80.
 
 ## How It Works
 

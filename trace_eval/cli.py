@@ -257,7 +257,7 @@ def cmd_ci(args: argparse.Namespace) -> int:
         print("       trace-eval ci --latest --min-score 80", file=sys.stderr)
         return 1
     # --hours is only valid with --latest (it controls the search window)
-    if not use_latest and getattr(args, "hours", None) != 48:
+    if not use_latest and getattr(args, "hours", None) is not None:
         print("Error: --hours is only valid with --latest", file=sys.stderr)
         return 1
 
@@ -269,7 +269,7 @@ def cmd_ci(args: argparse.Namespace) -> int:
         from trace_eval.convert import convert as _convert
         from trace_eval.locate import locate
 
-        hours = getattr(args, "hours", 48)
+        hours = args.hours if args.hours is not None else 48
         try:
             locations = locate(agent_type="all", limit=1, hours=hours)
         except Exception as e:
@@ -548,7 +548,11 @@ def cmd_loop(args: argparse.Namespace) -> int:
     return 1 if result.get("error") else 0
 
 
-def main():
+def build_parser() -> argparse.ArgumentParser:
+    """Build the CLI argument parser. Side-effect free.
+
+    Used by main() and documentation validation tests.
+    """
     parser = argparse.ArgumentParser(
         prog="trace-eval",
         description="Evaluate your latest AI agent session. Run with no arguments to score the most recent session.",
@@ -626,7 +630,7 @@ def main():
     p_ci = sub.add_parser("ci", help="Quality gate for CI/CD pipelines (fails if score too low)")
     p_ci.add_argument("trace", nargs="?", default=None, help="Path to session file")
     p_ci.add_argument("--latest", action="store_true", help="Auto-locate and evaluate the most recent session")
-    p_ci.add_argument("--hours", type=int, default=48, help="Search window in hours for --latest (default: 48)")
+    p_ci.add_argument("--hours", type=int, default=None, help="Search window in hours for --latest (default: 48)")
     p_ci.add_argument("--min-score", type=float, default=80, help="Minimum total score (default: 80)")
     p_ci.add_argument(
         "--min-dimension",
@@ -718,6 +722,11 @@ def main():
         help="Output format (default: text)",
     )
 
+    return parser
+
+
+def main():
+    parser = build_parser()
     args = parser.parse_args()
 
     commands = {
