@@ -1,8 +1,8 @@
 import json
 
-from trace_eval.report import ScoreRating, compute_rating, format_json, format_summary, format_text
+from trace_eval.report import format_json, format_summary, format_text
 from trace_eval.schema import FrictionFlag
-from trace_eval.scoring import Scorecard
+from trace_eval.scoring import Scorecard, compute_rating
 
 
 def _make_card():
@@ -207,14 +207,14 @@ def test_summary_good_run():
 
 
 def test_rating_thresholds():
-    assert compute_rating(95) == ScoreRating.EXCELLENT
-    assert compute_rating(90) == ScoreRating.EXCELLENT
-    assert compute_rating(89) == ScoreRating.GOOD
-    assert compute_rating(70) == ScoreRating.GOOD
-    assert compute_rating(69) == ScoreRating.NEEDS_WORK
-    assert compute_rating(40) == ScoreRating.NEEDS_WORK
-    assert compute_rating(39) == ScoreRating.CRITICAL
-    assert compute_rating(0) == ScoreRating.CRITICAL
+    assert compute_rating(95) == "Excellent"
+    assert compute_rating(90) == "Excellent"
+    assert compute_rating(89) == "Good"
+    assert compute_rating(70) == "Fair"
+    assert compute_rating(69) == "Fair"
+    assert compute_rating(40) == "Poor"
+    assert compute_rating(39) == "Critical"
+    assert compute_rating(0) == "Critical"
 
 
 def test_json_has_rating():

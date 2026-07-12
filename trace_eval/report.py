@@ -4,51 +4,26 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict
-from enum import Enum
 from typing import Any
 
 from trace_eval.schema import FrictionFlag
-from trace_eval.scoring import Scorecard
+from trace_eval.scoring import (
+    Scorecard,
+    compute_rating,
+    rating_explanation,
+)
 
 SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3}
 
 
-class ScoreRating(Enum):
-    EXCELLENT = "Excellent"
-    GOOD = "Good"
-    NEEDS_WORK = "Needs Work"
-    CRITICAL = "Critical"
-
-
-# Plain-English score interpretation
-SCORE_INTERPRETATION = {
-    (80, 100): ("Good", "A clean session with minimal friction"),
-    (60, 80): ("Fair", "Some issues but the agent completed the task"),
-    (40, 60): ("Poor", "Significant friction — errors or wasted effort"),
-    (0, 40): ("Critical", "Major problems — the agent struggled to complete the task"),
-}
-
-
 def score_interpretation(score: float) -> str:
-    """Return a plain-English interpretation of a score with context."""
-    for (low, high), (label, desc) in sorted(SCORE_INTERPRETATION.items(), key=lambda x: -x[0][0]):
-        if low <= score < high:
-            return f"{label} — {desc}"
-    if score >= 100:
-        return "Excellent — Near-perfect session"
-    return "Unknown"
+    """Return a plain-English interpretation of a score with context.
 
-
-def compute_rating(score: float) -> ScoreRating:
-    """Map a 0-100 score to a human-readable rating."""
-    if score >= 90:
-        return ScoreRating.EXCELLENT
-    elif score >= 70:
-        return ScoreRating.GOOD
-    elif score >= 40:
-        return ScoreRating.NEEDS_WORK
-    else:
-        return ScoreRating.CRITICAL
+    Delegates to the canonical rating function in scoring.py.
+    """
+    rating = compute_rating(score)
+    explanation = rating_explanation(score)
+    return f"{rating} — {explanation}"
 
 
 def format_text(card: Scorecard, adapter_report: dict[str, Any] | None = None) -> str:

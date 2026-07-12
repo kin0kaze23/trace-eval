@@ -240,19 +240,82 @@ def cmd_compare(args: argparse.Namespace) -> int:
 
 
 def cmd_ci(args: argparse.Namespace) -> int:
-    path = Path(args.trace)
-    if not path.exists():
-        print(f"Error: file not found: {path}", file=sys.stderr)
-        return 1
-
-    min_score = args.min_score
-    allow_partial = args.allow_partial
     use_json = args.format == "json"
     profile = getattr(args, "profile", None)
+    min_score = args.min_score
+    allow_partial = args.allow_partial
 
-    trace, adapter_report = load_trace_with_report(path)
-    judge_results = {name: fn(trace.events) for name, fn in JUDGES.items()}
-    card = compute_scorecard(judge_results, profile=profile)
+    trace_path_str = getattr(args, "trace", None)
+    use_latest = getattr(args, "latest", False)
+
+    if trace_path_str and use_latest:
+        print("Error: cannot specify both a trace path and --latest", file=sys.stderr)
+        return 1
+    if not trace_path_str and not use_latest:
+        print("Error: must specify either a trace path or --latest", file=sys.stderr)
+        print("Usage: trace-eval ci <trace> --min-score 80", file=sys.stderr)
+        print("       trace-eval ci --latest --min-score 80", file=sys.stderr)
+        return 1
+
+    if use_latest:
+        import json as _json
+        import tempfile
+
+        from trace_eval.convert import _detect_format
+        from trace_eval.convert import convert as _convert
+        from trace_eval.locate import locate
+
+        hours = getattr(args, "hours", 48)
+        try:
+            locations = locate(agent_type="all", limit=1, hours=hours)
+        except Exception as e:
+            print(f"Error: locate failed: {e}", file=sys.stderr)
+            return 1
+        if not locations:
+            print("Error: no recent agent sessions found", file=sys.stderr)
+            print("Try: trace-eval doctor", file=sys.stderr)
+            return 1
+
+        loc = locations[0]
+        trace_path = Path(loc.path)
+        canonical_path = str(trace_path)
+        _temp_path = None
+
+        try:
+            fmt = _detect_format(trace_path)
+            if fmt != "canonical":
+                events = _convert(trace_path, fmt=fmt)
+                tmp = tempfile.NamedTemporaryFile(mode="w", suffix="_canonical.jsonl", delete=False)
+                for ev in events:
+                    tmp.write(_json.dumps(ev) + "\n")
+                tmp.close()
+                canonical_path = tmp.name
+                _temp_path = tmp.name
+        except Exception as e:
+            print(f"Error: conversion failed: {e}", file=sys.stderr)
+            return 1
+
+        try:
+            trace, adapter_report = load_trace_with_report(Path(canonical_path))
+            judge_results = {name: fn(trace.events) for name, fn in JUDGES.items()}
+            card = compute_scorecard(judge_results, profile=profile)
+        finally:
+            if _temp_path:
+                try:
+                    import os as _os
+
+                    _os.unlink(_temp_path)
+                except OSError:
+                    pass
+    else:
+        path = Path(trace_path_str)
+        if not path.exists():
+            print(f"Error: file not found: {path}", file=sys.stderr)
+            return 1
+
+        trace, adapter_report = load_trace_with_report(path)
+        judge_results = {name: fn(trace.events) for name, fn in JUDGES.items()}
+        card = compute_scorecard(judge_results, profile=profile)
 
     # Collect structured failure reasons
     failed_thresholds: list[dict] = []
@@ -557,7 +620,9 @@ def main():
 
     # ci
     p_ci = sub.add_parser("ci", help="Quality gate for CI/CD pipelines (fails if score too low)")
-    p_ci.add_argument("trace", help="Path to session file")
+    p_ci.add_argument("trace", nargs="?", default=None, help="Path to session file")
+    p_ci.add_argument("--latest", action="store_true", help="Auto-locate and evaluate the most recent session")
+    p_ci.add_argument("--hours", type=int, default=48, help="Search window in hours for --latest (default: 48)")
     p_ci.add_argument("--min-score", type=float, default=80, help="Minimum total score (default: 80)")
     p_ci.add_argument(
         "--min-dimension",

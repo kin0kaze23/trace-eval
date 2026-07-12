@@ -10,7 +10,7 @@ Add this step to your GitHub Actions workflow:
 - name: Evaluate agent trace quality
   run: |
     pip install trace-eval
-    trace-eval ci --min-score 80
+    trace-eval ci path/to/session.jsonl --min-score 80
 ```
 
 This auto-locates the most recent agent trace, scores it, and fails the job if the score is below 80.
@@ -19,8 +19,8 @@ This auto-locates the most recent agent trace, scores it, and fails the job if t
 
 `trace-eval ci` is a dedicated CI gate command that:
 
-1. Locates the most recent agent trace (same as `trace-eval loop`)
-2. Converts it to canonical format if needed
+1. Accepts an explicit trace path **or** uses `--latest` to auto-locate the most recent session
+2. Converts to canonical format if needed (when using `--latest`)
 3. Scores it across all 5 dimensions
 4. Exits with code **1** if the score is below `--min-score`
 5. Exits with code **0** if the score meets the threshold
@@ -38,7 +38,7 @@ This auto-locates the most recent agent trace, scores it, and fails the job if t
 
 ```yaml
 - name: Check latest agent trace
-  run: trace-eval ci --min-score 70
+  run: trace-eval ci --latest --min-score 70
 ```
 
 ### With profile
@@ -52,7 +52,7 @@ This auto-locates the most recent agent trace, scores it, and fails the job if t
 
 ```yaml
 - name: Check trace (last 7 days)
-  run: trace-eval ci --hours 168 --min-score 80
+  run: trace-eval ci --latest --hours 168 --min-score 80
 ```
 
 ## Recommended Thresholds
@@ -88,11 +88,11 @@ jobs:
         run: pip install trace-eval
 
       - name: Run quality gate
-        run: trace-eval ci --profile coding_agent --min-score 80
+        run: trace-eval ci path/to/session.jsonl --profile coding_agent --min-score 80
 
       - name: Show details on failure
         if: failure()
-        run: trace-eval run --format json | head -50
+        run: trace-eval run path/to/session.jsonl --format json | head -50
 ```
 
 ## Output
@@ -113,7 +113,7 @@ Top issues:
 ## JSON Output for Programmatic Use
 
 ```bash
-trace-eval ci --format json
+trace-eval ci path/to/session.jsonl --format json
 ```
 
 Returns:

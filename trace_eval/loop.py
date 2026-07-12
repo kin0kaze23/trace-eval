@@ -34,6 +34,19 @@ JUDGES = {
 SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3}
 
 
+def _cleanup_temp_file(path):
+    """Remove a temporary file if it exists. Never raises."""
+    if path is None:
+        return
+    try:
+        import os as _os
+
+        if _os.path.exists(path):
+            _os.unlink(path)
+    except OSError:
+        pass
+
+
 def run_loop(
     agent_type: str = "all",
     hours: int = 48,
@@ -87,6 +100,7 @@ def run_loop(
 
     # Step 2: Convert if needed
     canonical_path = trace_path
+    _temp_canonical_path = None
     try:
         fmt = _detect_format(Path(trace_path))
         if fmt != "canonical":
@@ -108,20 +122,28 @@ def run_loop(
                     tmp.write(json.dumps(ev) + "\n")
                 tmp.close()
                 canonical_path = tmp.name
+                _temp_canonical_path = tmp.name
     except ValueError as e:
         result["error"] = f"Could not convert trace: {e}"
+        _cleanup_temp_file(_temp_canonical_path)
         return result
     except Exception as e:
         result["error"] = f"Conversion failed: {e}"
+        _cleanup_temp_file(_temp_canonical_path)
         return result
 
-    # Step 3: Score
+    # Steps 3-7: wrapped so temp file is always cleaned up
     try:
-        trace, adapter_report = load_trace_with_report(Path(canonical_path))
-        result["adapter_report"] = adapter_report
-    except Exception as e:
-        result["error"] = f"Could not load trace: {e}"
-        return result
+        # Step 3: Score
+        try:
+            trace, adapter_report = load_trace_with_report(Path(canonical_path))
+            result["adapter_report"] = adapter_report
+        except Exception as e:
+            result["error"] = f"Could not load trace: {e}"
+            return result
+
+    finally:
+        _cleanup_temp_file(_temp_canonical_path)
 
     try:
         judge_results = {name: judge_fn(trace.events) for name, judge_fn in JUDGES.items()}

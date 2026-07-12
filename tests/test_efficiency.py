@@ -25,22 +25,25 @@ def test_high_tokens_penalty():
     events = [_make_event(i, tokens_in=5000, tokens_out=0) for i in range(5)]
     result = judge_efficiency(events)
     # total_tokens = 25000, token_sub = 50
-    # cost_sub = 100 (no cost), tool_density_sub = 100 (no tool calls)
-    # composite = 50*0.4 + 100*0.3 + 100*0.3 = 20 + 30 + 30 = 80
-    assert result.score == 80.0
+    # Only token data present (no cost, no tool calls)
+    # With proportional redistribution: score = 50 * 1.0 = 50.0
+    assert result.score == 50.0
+    assert result.confidence == "medium"  # partial telemetry
 
 
 def test_high_cost_penalty():
     events = [_make_event(0, cost_estimate=0.50)]
     result = judge_efficiency(events)
     # cost_sub = max(0, 100 - 0.50*100) = 50
-    # token_sub = 100, tool_density = 100
-    # composite = 100*0.4 + 50*0.3 + 100*0.3 = 40 + 15 + 30 = 85
-    assert result.score == 85.0
+    # Only cost data present (no tokens, no tool calls)
+    # With proportional redistribution: score = 50 * 1.0 = 50.0
+    assert result.score == 50.0
+    assert result.confidence == "medium"  # partial telemetry
 
 
 def test_unscorable_no_data():
     events = [_make_event(0)]
     result = judge_efficiency(events)
-    # No tokens, cost, or tool data — but we can still compute (all zeros = good)
-    assert result.scorable is True
+    # No tokens, cost, or tool data — judge is not scorable
+    assert result.scorable is False
+    assert result.score is None
