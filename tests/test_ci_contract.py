@@ -118,7 +118,8 @@ class TestCILatestOption:
             or "locate" in result.stderr.lower()
         )
 
-    def test_hours_without_latest_accepted(self, tmp_path):
+    def test_hours_without_latest_fails(self, tmp_path):
         trace = _make_trace(tmp_path, "good", GOOD_LINES)
         result = _run(["ci", str(trace), "--hours", "168", "--min-score", "0"])
-        assert result.returncode == 0
+        assert result.returncode != 0
+        assert "--hours is only valid with --latest" in result.stderr

@@ -132,7 +132,8 @@ def run_loop(
         _cleanup_temp_file(_temp_canonical_path)
         return result
 
-    # Steps 3-7: wrapped so temp file is always cleaned up
+    # Steps 3-7: ALL wrapped in one outer try/finally so the temp file
+    # survives until every requested downstream operation completes.
     try:
         # Step 3: Score
         try:
@@ -142,76 +143,77 @@ def run_loop(
             result["error"] = f"Could not load trace: {e}"
             return result
 
+        try:
+            judge_results = {name: judge_fn(trace.events) for name, judge_fn in JUDGES.items()}
+            card = compute_scorecard(judge_results, profile=profile)
+            result["scorecard"] = card
+        except Exception:
+            result["error"] = "Score computation failed."
+            return result
+
+        # Step 4: Remediate
+        try:
+            from trace_eval.remediation import analyze_with_context
+
+            actions = analyze_with_context(card, trace.events)
+            result["actions"] = actions
+        except Exception as e:
+            result["error"] = f"Remediation analysis failed: {e}"
+            return result
+
+        # Step 4b: Extract context for plain-English output
+        result["token_info"] = _extract_token_summary(trace.events)
+        result["tool_info"] = _extract_tool_summary(trace.events)
+        result["retry_info"] = _extract_retry_summary(trace.events)
+        result["error_summary"] = _extract_error_summary(trace.events, card.all_flags)
+        result["task_label"] = _extract_task_label(trace.events)
+        result["task_id"] = _extract_task_id(trace.events)
+        result["session_duration"] = _extract_session_duration(trace.events)
+
+        # Step 5: Apply-safe (if flagged)
+        if apply_safe:
+            try:
+                fixes = apply_safe_fixes(actions, card, Path(canonical_path))
+                result["safe_fixes_applied"] = fixes
+            except Exception as e:
+                result.setdefault("_warnings", []).append(f"apply_safe failed: {e}")
+
+        # Step 6: Compare (if compare_path provided)
+        if compare_path:
+            try:
+                before_path = Path(compare_path)
+                before_trace, _ = load_trace_with_report(before_path)
+                before_judges = {name: judge_fn(before_trace.events) for name, judge_fn in JUDGES.items()}
+                before_card = compute_scorecard(before_judges, profile=profile)
+                delta = round(card.total_score - before_card.total_score, 1)
+                result["compare"] = {
+                    "before_score": before_card.total_score,
+                    "after_score": card.total_score,
+                    "delta": delta,
+                    "before_name": before_path.name,
+                }
+            except FileNotFoundError:
+                result.setdefault("_warnings", []).append(f"Compare file not found: {compare_path}")
+            except Exception as e:
+                result.setdefault("_warnings", []).append(f"Compare failed: {e}")
+
+        # Step 7: Report (if flagged)
+        if report:
+            try:
+                if output_dir:
+                    report_out = Path(output_dir) / f"{Path(trace_path).stem}_report.md"
+                else:
+                    report_out = None
+                report_path = generate_remediation_report(actions, card, Path(canonical_path), output_path=report_out)
+                result["report_path"] = report_path
+            except Exception as e:
+                result.setdefault("_warnings", []).append(f"Report generation failed: {e}")
+
+        return result
     finally:
+        # Always clean up temporary canonical files (privacy + disk hygiene).
+        # This runs AFTER all steps complete, including apply-safe, compare, and report.
         _cleanup_temp_file(_temp_canonical_path)
-
-    try:
-        judge_results = {name: judge_fn(trace.events) for name, judge_fn in JUDGES.items()}
-        card = compute_scorecard(judge_results, profile=profile)
-        result["scorecard"] = card
-    except Exception:
-        result["error"] = "Score computation failed."
-        return result
-
-    # Step 4: Remediate
-    try:
-        from trace_eval.remediation import analyze_with_context
-
-        actions = analyze_with_context(card, trace.events)
-        result["actions"] = actions
-    except Exception as e:
-        result["error"] = f"Remediation analysis failed: {e}"
-        return result
-
-    # Step 4b: Extract context for plain-English output
-    result["token_info"] = _extract_token_summary(trace.events)
-    result["tool_info"] = _extract_tool_summary(trace.events)
-    result["retry_info"] = _extract_retry_summary(trace.events)
-    result["error_summary"] = _extract_error_summary(trace.events, card.all_flags)
-    result["task_label"] = _extract_task_label(trace.events)
-    result["task_id"] = _extract_task_id(trace.events)
-    result["session_duration"] = _extract_session_duration(trace.events)
-
-    # Step 5: Apply-safe (if flagged)
-    if apply_safe:
-        try:
-            fixes = apply_safe_fixes(actions, card, Path(canonical_path))
-            result["safe_fixes_applied"] = fixes
-        except Exception as e:
-            result.setdefault("_warnings", []).append(f"apply_safe failed: {e}")
-
-    # Step 6: Compare (if compare_path provided)
-    if compare_path:
-        try:
-            before_path = Path(compare_path)
-            before_trace, _ = load_trace_with_report(before_path)
-            before_judges = {name: judge_fn(before_trace.events) for name, judge_fn in JUDGES.items()}
-            before_card = compute_scorecard(before_judges, profile=profile)
-            delta = round(card.total_score - before_card.total_score, 1)
-            result["compare"] = {
-                "before_score": before_card.total_score,
-                "after_score": card.total_score,
-                "delta": delta,
-                "before_name": before_path.name,
-            }
-        except FileNotFoundError:
-            result.setdefault("_warnings", []).append(f"Compare file not found: {compare_path}")
-        except Exception as e:
-            result.setdefault("_warnings", []).append(f"Compare failed: {e}")
-
-    # Step 7: Report (if flagged)
-    if report:
-        try:
-            if output_dir:
-                report_out = Path(output_dir) / f"{Path(trace_path).stem}_report.md"
-            else:
-                report_out = None
-            report_path = generate_remediation_report(actions, card, Path(canonical_path), output_path=report_out)
-            result["report_path"] = report_path
-        except Exception as e:
-            result.setdefault("_warnings", []).append(f"Report generation failed: {e}")
-
-    return result
 
 
 def format_loop_text(result: dict) -> str:

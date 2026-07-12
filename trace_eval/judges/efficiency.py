@@ -4,6 +4,14 @@ from __future__ import annotations
 
 from trace_eval.schema import Event, FrictionFlag, JudgeResult
 
+# Fixed component weights — these do NOT change when telemetry is missing.
+# Missing components contribute zero weighted points, which is conservative:
+# removing a low-scoring component cannot increase the score because its
+# weight is retained but its contribution drops to zero.
+TOKEN_WEIGHT = 0.4
+COST_WEIGHT = 0.3
+TOOL_DENSITY_WEIGHT = 0.3
+
 
 def judge_efficiency(events: list[Event]) -> JudgeResult:
     if not events:
@@ -16,13 +24,17 @@ def judge_efficiency(events: list[Event]) -> JudgeResult:
             scorable=False,
         )
 
-    # Track which telemetry sources are actually observed (not missing)
+    # Track which telemetry sources are actually observed (not missing).
+    # A session with zero tool calls has OBSERVED zero tool calls,
+    # not missing tool-call telemetry.
     has_token_data = any(e.tokens_in is not None or e.tokens_out is not None for e in events)
     has_cost_data = any(e.cost_estimate is not None for e in events)
-    has_tool_calls = any(e.event_type is not None and e.event_type.value == "tool_call" for e in events)
+    # Tool-call telemetry is "observed" if the trace contains any events
+    # at all (the absence of tool_call events means zero observed calls).
+    has_tool_calls = len(events) > 0
     has_latency = any(e.latency_ms is not None for e in events)
 
-    # Compute observed values (only from events that actually have the data)
+    # Compute observed values
     total_tokens = sum(
         (e.tokens_in or 0) + (e.tokens_out or 0) for e in events if e.tokens_in is not None or e.tokens_out is not None
     )
@@ -30,30 +42,25 @@ def judge_efficiency(events: list[Event]) -> JudgeResult:
     tool_call_count = sum(1 for e in events if e.event_type is not None and e.event_type.value == "tool_call")
     total_latency_ms = sum(e.latency_ms or 0 for e in events if e.latency_ms is not None)
 
-    # Build sub-scores only from observed telemetry
-    DEFAULT_WEIGHTS = {
-        "tokens": 0.4,
-        "cost": 0.3,
-        "tool_density": 0.3,
-    }
-
-    sub_scores: dict[str, float] = {}
-    active_weights: dict[str, float] = {}
+    # Compute sub-scores using FIXED weights.
+    # Missing components contribute 0 * weight = 0 to the total.
+    # This ensures removing a low-scoring component cannot increase the score.
+    score = 0.0
 
     if has_token_data:
-        sub_scores["tokens"] = max(0, 100 - total_tokens / 500)
-        active_weights["tokens"] = DEFAULT_WEIGHTS["tokens"]
+        token_sub = max(0, 100 - total_tokens / 500)
+        score += TOKEN_WEIGHT * token_sub
 
     if has_cost_data:
-        sub_scores["cost"] = max(0, 100 - cost_estimate * 100)
-        active_weights["cost"] = DEFAULT_WEIGHTS["cost"]
+        cost_sub = max(0, 100 - cost_estimate * 100)
+        score += COST_WEIGHT * cost_sub
 
     if has_tool_calls:
-        sub_scores["tool_density"] = max(0, 100 - tool_call_count * 2)
-        active_weights["tool_density"] = DEFAULT_WEIGHTS["tool_density"]
+        tool_density_sub = max(0, 100 - tool_call_count * 2)
+        score += TOOL_DENSITY_WEIGHT * tool_density_sub
 
     # If no efficiency metrics are available at all, the judge is not scorable
-    if not sub_scores:
+    if not has_token_data and not has_cost_data and not has_tool_calls:
         return JudgeResult(
             score=None,
             confidence="low",
@@ -67,13 +74,6 @@ def judge_efficiency(events: list[Event]) -> JudgeResult:
             },
             scorable=False,
         )
-
-    # Proportionally redistribute weights across available sub-scores
-    total_active_weight = sum(active_weights.values())
-    score = 0.0
-    for name, sub_score in sub_scores.items():
-        weight = active_weights[name] / total_active_weight if total_active_weight > 0 else 0
-        score += weight * sub_score
 
     # Latency penalty (only if latency data exists)
     if has_latency and total_latency_ms > 0:
@@ -90,6 +90,14 @@ def judge_efficiency(events: list[Event]) -> JudgeResult:
         confidence = "medium"
     else:
         confidence = "low"
+
+    # Telemetry coverage for reporting
+    coverage = {
+        "has_token_data": has_token_data,
+        "has_cost_data": has_cost_data,
+        "has_tool_calls": has_tool_calls,
+        "has_latency": has_latency,
+    }
 
     # Friction flags
     flags: list[FrictionFlag] = []
@@ -130,8 +138,6 @@ def judge_efficiency(events: list[Event]) -> JudgeResult:
         missing.append("tokens")
     if not has_cost_data:
         missing.append("cost")
-    if not has_tool_calls:
-        missing.append("tool_calls")
     missing_str = f" Missing: {', '.join(missing)}" if missing else ""
 
     return JudgeResult(
@@ -147,10 +153,7 @@ def judge_efficiency(events: list[Event]) -> JudgeResult:
             "cost_estimate": cost_estimate,
             "tool_call_count": tool_call_count,
             "total_latency_ms": total_latency_ms,
-            "has_token_data": has_token_data,
-            "has_cost_data": has_cost_data,
-            "has_tool_calls": has_tool_calls,
-            "has_latency": has_latency,
+            **coverage,
         },
         scorable=True,
     )

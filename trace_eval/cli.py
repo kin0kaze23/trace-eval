@@ -256,6 +256,10 @@ def cmd_ci(args: argparse.Namespace) -> int:
         print("Usage: trace-eval ci <trace> --min-score 80", file=sys.stderr)
         print("       trace-eval ci --latest --min-score 80", file=sys.stderr)
         return 1
+    # --hours is only valid with --latest (it controls the search window)
+    if not use_latest and getattr(args, "hours", None) != 48:
+        print("Error: --hours is only valid with --latest", file=sys.stderr)
+        return 1
 
     if use_latest:
         import json as _json

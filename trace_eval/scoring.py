@@ -126,10 +126,10 @@ def compute_scorecard(
     # Check missing required judges
     missing_required = [n for n in REQUIRED_JUDGES if n in unscorable]
 
-    # Compute rating using canonical function
-    rating = compute_rating(total_score)
-
-    rounded_score = round(total_score, 2)
+    # Round to canonical precision FIRST, then derive rating from rounded value.
+    # This ensures displayed score and rating always agree.
+    rounded_score = round(total_score, 1)
+    rating = compute_rating(rounded_score)
 
     return Scorecard(
         total_score=rounded_score,

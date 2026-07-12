@@ -45,7 +45,7 @@ This auto-locates the most recent agent trace, scores it, and fails the job if t
 
 ```yaml
 - name: Check coding agent quality
-  run: trace-eval ci --profile coding_agent --min-score 75
+  run: trace-eval ci path/to/session.jsonl --profile coding_agent --min-score 75
 ```
 
 ### With extended search window
