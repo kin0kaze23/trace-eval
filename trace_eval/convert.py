@@ -647,6 +647,10 @@ def _detect_format(input_path: Path) -> str:
     return "unknown"
 
 
+# ---------------------------------------------------------------------------
+# Backward-compatible CONVERTERS dict (kept for existing callers)
+# ---------------------------------------------------------------------------
+
 CONVERTERS = {
     "claude-code": convert_claude_code,
     "claude_code": convert_claude_code,
@@ -675,3 +679,31 @@ def convert(input_path: Path, fmt: str | None = None) -> list[dict]:
         raise ValueError(f"Unknown format: {fmt}. Supported: {list(CONVERTERS.keys())}")
 
     return converter(input_path)
+
+
+# ---------------------------------------------------------------------------
+# Register converters in the typed registry
+# ---------------------------------------------------------------------------
+
+from trace_eval.registry import CONVERTER_REGISTRY  # noqa: E402
+
+CONVERTER_REGISTRY.register(
+    canonical_name="claude-code",
+    aliases=["claude_code", "claude-code"],
+    converter=convert_claude_code,
+    description="Claude Code sessions (.jsonl from ~/.claude/projects/)",
+)
+
+CONVERTER_REGISTRY.register(
+    canonical_name="openclaw",
+    aliases=[],
+    converter=convert_openclaw,
+    description="OpenClaw sessions (.jsonl from ~/.openclaw/)",
+)
+
+CONVERTER_REGISTRY.register(
+    canonical_name="cursor",
+    aliases=[],
+    converter=convert_cursor,
+    description="Cursor agent transcripts (.jsonl)",
+)
