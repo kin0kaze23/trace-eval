@@ -2,6 +2,8 @@
 
 import pytest
 
+import trace_eval.cli  # noqa: F401  — populates JUDGE_REGISTRY
+import trace_eval.convert  # noqa: F401  — populates CONVERTER_REGISTRY
 from trace_eval.registry import (
     CONVERTER_REGISTRY,
     JUDGE_REGISTRY,
