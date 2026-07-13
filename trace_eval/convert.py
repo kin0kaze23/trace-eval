@@ -115,7 +115,7 @@ def convert_claude_code(input_path: Path) -> list[dict]:
                                     if isinstance(c, dict) and c.get("type") == "text"
                                 )
 
-                            is_error = block.get("isError", False)
+                            is_error = bool(block.get("is_error", block.get("isError", False)))
                             has_error = is_error or _cc_detect_error(tool_result_text)
                             # Provider-backed status: isError=True -> error,
                             # otherwise success (tool returned a result)
@@ -244,7 +244,7 @@ def convert_claude_code(input_path: Path) -> list[dict]:
         if etype == "tool_result":
             msg = e.get("message", {})
             content_blocks = msg.get("content", [])
-            is_error = msg.get("isError", False)
+            is_error = bool(msg.get("is_error", msg.get("isError", False)))
 
             # Extract tool name from content
             tool_name = None
@@ -263,9 +263,12 @@ def convert_claude_code(input_path: Path) -> list[dict]:
 
             # Detect error status
             has_error = is_error or _cc_detect_error(text)
-            # Provider-backed status: isError=True -> error,
+            # Provider-backed status: is_error=True -> error,
             # otherwise success (tool returned a result)
             status = "error" if has_error else "success"
+
+            # Extract tool_call_id from the message (tool_use_id reference)
+            tool_call_id = msg.get("tool_use_id") or msg.get("tool_call_id")
 
             # Try to parse tool_args from first text block
             tool_args = None
@@ -287,6 +290,7 @@ def convert_claude_code(input_path: Path) -> list[dict]:
                     "session_id": session_id,
                     "tool_name": tool_name,
                     "tool_args": tool_args,
+                    "tool_call_id": tool_call_id,
                 }
             )
             idx += 1
