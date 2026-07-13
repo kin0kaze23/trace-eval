@@ -440,10 +440,12 @@ def convert_openclaw(input_path: Path) -> list[dict]:
 
                 has_error = is_error or ('"status": "error"' in content or '"error":' in content)
                 # Status inference:
-                # - isError=True -> error (explicit provider signal)
-                # - isError=False -> success (explicit provider signal)
-                # - isError absent -> heuristic: infer success from absence of error
-                #   OpenClaw typically emits isError, but absence is treated as success.
+                # - isError=True -> error
+                # - otherwise infer success when no error pattern is detected
+                # - when isError is absent, this is heuristic rather than an explicit
+                #   provider-contract guarantee
+                # - the current canonical event does not preserve whether this inference
+                #   came from an explicit false value or from an absent field
                 status = "error" if has_error else "success"
 
                 tool_args = None
@@ -584,12 +586,12 @@ def convert_cursor(input_path: Path) -> list[dict]:
 
             has_error = is_error or _cc_detect_error(content)
             # Status inference:
-            # - isError=True -> error (explicit provider signal)
-            # - isError=False -> success (explicit provider signal)
-            # - isError absent -> heuristic: infer success from absence of error
-            #   This is NOT an explicit provider-contract guarantee.
-            #   Cursor does not always emit isError for successful results.
-            #   Confidence is reduced when relying on heuristic inference.
+            # - isError=True -> error
+            # - otherwise infer success when no error pattern is detected
+            # - when isError is absent, this is heuristic rather than an explicit
+            #   provider-contract guarantee
+            # - the current canonical event does not preserve whether this inference
+            #   came from an explicit false value or from an absent field
             status = "error" if has_error else "success"
 
             tool_args = None
