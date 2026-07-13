@@ -1,6 +1,7 @@
 """Tests for typed converter and judge registries."""
 
 import pytest
+
 from trace_eval.registry import (
     CONVERTER_REGISTRY,
     JUDGE_REGISTRY,
@@ -9,7 +10,6 @@ from trace_eval.registry import (
     JudgeEntry,
     JudgeRegistry,
 )
-
 
 # ---------------------------------------------------------------------------
 # ConverterRegistry tests
