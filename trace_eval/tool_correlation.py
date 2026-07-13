@@ -19,10 +19,14 @@ from trace_eval.schema import Event, EventType
 
 @dataclass
 class ToolAttempt:
-    """A paired tool call and its result (if any)."""
+    """A paired tool call and its result (if any).
 
-    call: Event
-    result: Event | None
+    For orphan results (result with no matching call), `call` is None.
+    For unmatched calls (call with no matching result), `result` is None.
+    """
+
+    call: Event | None  # None for orphan results
+    result: Event | None  # None for unmatched calls
     tool_call_id: str | None
     match_kind: str  # "exact", "heuristic", "unmatched_call", "orphan_result"
 
@@ -175,7 +179,7 @@ def pair_tool_attempts(events: list[Event]) -> list[ToolAttempt]:
         if _event_key(r) not in matched_results:
             attempts.append(
                 ToolAttempt(
-                    call=_dummy_call(),
+                    call=None,  # No matching call — clearly an orphan
                     result=r,
                     tool_call_id=r.tool_call_id,
                     match_kind="orphan_result",
@@ -184,28 +188,51 @@ def pair_tool_attempts(events: list[Event]) -> list[ToolAttempt]:
             matched_results.add(_event_key(r))
 
     # Sort attempts by call event_index for deterministic output
-    attempts.sort(key=lambda a: a.call.event_index or 0)
+    # Orphan results (call=None) sort last
+    attempts.sort(key=lambda a: a.call.event_index if a.call is not None else float("inf"))
     return attempts
 
 
-def _dummy_call() -> Event:
-    """Create a placeholder Event for orphan results."""
-    return Event(
-        event_index=-1,
-        actor="",
-        event_type=None,
-        timestamp="",
-        status=None,
-    )
+def _args_compatible(args1: dict | None, args2: dict | None) -> bool:
+    """Check if two argument dicts are compatible for retry detection.
+
+    Deterministic rule:
+    - Both present and identical → compatible (strong evidence of retry)
+    - Both absent → compatible (weak evidence — same tool, no args to compare)
+    - One side missing → NOT compatible (insufficient evidence)
+    - Both present but different → NOT compatible (new operation)
+
+    For a deterministic evaluator, uncertainty (one side missing) should
+    NOT create a positive classification. It should reduce confidence
+    or prevent classification entirely.
+    """
+    if args1 is None and args2 is None:
+        # Both absent — compatible but weak evidence
+        return True
+    if args1 is None or args2 is None:
+        # One side missing — insufficient evidence, NOT compatible
+        return False
+    if args1 == args2:
+        # Both present and identical — strong evidence
+        return True
+    # Both present but different — new operation
+    return False
 
 
 def compute_correlation_metrics(attempts: list[ToolAttempt]) -> dict:
     """Compute raw metrics from paired attempts.
 
-    Retry detection is per (session_id, normalized tool_name), not by
-    global adjacency. A retry is detected when a call to a tool occurs
-    after a failed attempt to the same tool in the same session, even
-    when unrelated tools were called in between.
+    Retry detection is per (session_id, normalized tool_name) with
+    argument compatibility checking. A retry is detected when:
+    1. A call to the same tool occurs after a failed attempt in the same session
+    2. The arguments are compatible (same or compatible args)
+    3. Different arguments indicate a new operation, not a retry
+
+    Returns a dict with metrics and event_index lists for friction flags:
+    - retry_event_indices: event_index of each retry call
+    - timeout_event_indices: event_index of each timed-out result
+    - redundant_event_indices: event_index of each redundant call
+    - unmatched_call_event_indices: event_index of each unmatched call
     """
     total = len(attempts)
     exact_pairs = sum(1 for a in attempts if a.match_kind == "exact")
@@ -220,7 +247,7 @@ def compute_correlation_metrics(attempts: list[ToolAttempt]) -> dict:
     # Detect duplicate tool_call_ids (within the same session)
     id_counts: dict[tuple[str | None, str], int] = {}
     for a in attempts:
-        if a.tool_call_id:
+        if a.tool_call_id and a.call is not None:
             key = (a.call.session_id, a.tool_call_id)
             id_counts[key] = id_counts.get(key, 0) + 1
     duplicate_ids = sum(1 for v in id_counts.values() if v > 1)
@@ -229,6 +256,7 @@ def compute_correlation_metrics(attempts: list[ToolAttempt]) -> dict:
     failed_attempts = 0
     successful_attempts = 0
     tool_timeouts = 0
+    timeout_event_indices: list[int] = []
     for a in attempts:
         if a.match_kind in ("unmatched_call", "orphan_result"):
             continue
@@ -239,6 +267,8 @@ def compute_correlation_metrics(attempts: list[ToolAttempt]) -> dict:
             elif status_val == "timeout":
                 tool_timeouts += 1
                 failed_attempts += 1
+                if a.result.event_index is not None:
+                    timeout_event_indices.append(a.result.event_index)
             elif status_val == "success":
                 successful_attempts += 1
             elif status_val == "partial":
@@ -249,15 +279,23 @@ def compute_correlation_metrics(attempts: list[ToolAttempt]) -> dict:
     # Track the most recent outcome for each tool in each session
     tool_retries = 0
     redundant_calls = 0
+    retry_event_indices: list[int] = []
+    redundant_event_indices: list[int] = []
 
     # Sort by event_index for ordering
-    sorted_attempts = sorted(attempts, key=lambda a: a.call.event_index or 0)
+    # Only include attempts with a call (skip orphan results)
+    sorted_attempts = sorted(
+        [a for a in attempts if a.call is not None],
+        key=lambda a: a.call.event_index if a.call is not None else 0,
+    )
     real = [a for a in sorted_attempts if a.match_kind not in ("orphan_result",)]
 
     # Track last outcome per (session_id, normalized_tool_name)
     last_outcome: dict[tuple[str | None, str], dict] = {}
 
     for a in real:
+        if a.call is None:
+            continue  # Skip orphan results (shouldn't be in real, but defensive)
         session = a.call.session_id
         tool = _normalize_tool_name(a.call.tool_name)
         key = (session, tool)
@@ -276,12 +314,19 @@ def compute_correlation_metrics(attempts: list[ToolAttempt]) -> dict:
         if key in last_outcome:
             prev = last_outcome[key]
             if prev.get("failed"):
-                # Previous attempt to this tool failed — this is a retry
-                tool_retries += 1
+                # Previous attempt to this tool failed — check if this is a retry
+                # A retry requires compatible arguments (same operation)
+                if _args_compatible(a.call.tool_args, prev.get("args")):
+                    tool_retries += 1
+                    if a.call.event_index is not None:
+                        retry_event_indices.append(a.call.event_index)
+                # else: different args = new operation, not a retry
             elif prev.get("succeeded"):
                 # Previous attempt succeeded — check for redundant call
                 if a.call.tool_args is not None and prev.get("args") is not None and a.call.tool_args == prev["args"]:
                     redundant_calls += 1
+                    if a.call.event_index is not None:
+                        redundant_event_indices.append(a.call.event_index)
 
         # Update last outcome for this tool
         last_outcome[key] = {
@@ -289,6 +334,13 @@ def compute_correlation_metrics(attempts: list[ToolAttempt]) -> dict:
             "succeeded": curr_succeeded,
             "args": a.call.tool_args,
         }
+
+    # Collect unmatched call event indices
+    unmatched_call_event_indices = [
+        a.call.event_index
+        for a in attempts
+        if a.match_kind == "unmatched_call" and a.call is not None and a.call.event_index is not None
+    ]
 
     # Correlation coverage
     if real_attempts > 0:
@@ -310,6 +362,11 @@ def compute_correlation_metrics(attempts: list[ToolAttempt]) -> dict:
         "redundant_calls": redundant_calls,
         "tool_timeouts": tool_timeouts,
         "correlation_coverage_pct": round(coverage_pct, 1),
+        # Event indices for friction flags
+        "retry_event_indices": retry_event_indices,
+        "timeout_event_indices": timeout_event_indices,
+        "redundant_event_indices": redundant_event_indices,
+        "unmatched_call_event_indices": unmatched_call_event_indices,
     }
 
 

@@ -53,45 +53,55 @@ def judge_tool_discipline(events: list[Event]) -> JudgeResult:
     score -= min(15, 5 * fallback_events)
     score = max(0.0, score)
 
-    # Friction flags
+    # Friction flags — each points to the specific event that triggered it
     flags: list[FrictionFlag] = []
     if metrics["tool_retries"] > 0:
+        # Point to the first retry call's event_index for explainability
+        first_retry_idx = metrics["retry_event_indices"][0] if metrics["retry_event_indices"] else None
         flags.append(
             FrictionFlag(
                 id="tool_retries",
                 severity="medium",
                 dimension="tool_discipline",
-                event_index=None,
+                event_index=first_retry_idx,
                 suggestion=f"{metrics['tool_retries']} tool retry(ies) detected",
             )
         )
     if metrics["redundant_calls"] > 0:
+        # Point to the first redundant call's event_index
+        first_redundant_idx = metrics["redundant_event_indices"][0] if metrics["redundant_event_indices"] else None
         flags.append(
             FrictionFlag(
                 id="tool_redundant",
                 severity="low",
                 dimension="tool_discipline",
-                event_index=None,
+                event_index=first_redundant_idx,
                 suggestion=f"{metrics['redundant_calls']} redundant tool call(s)",
             )
         )
     if metrics["tool_timeouts"] > 0:
+        # Point to the first timed-out result's event_index
+        first_timeout_idx = metrics["timeout_event_indices"][0] if metrics["timeout_event_indices"] else None
         flags.append(
             FrictionFlag(
                 id="tool_timeout",
                 severity="high",
                 dimension="tool_discipline",
-                event_index=None,
+                event_index=first_timeout_idx,
                 suggestion=f"{metrics['tool_timeouts']} tool call(s) timed out",
             )
         )
     if metrics["unmatched_calls"] > 0:
+        # Point to the first unmatched call's event_index
+        first_unmatched_idx = (
+            metrics["unmatched_call_event_indices"][0] if metrics["unmatched_call_event_indices"] else None
+        )
         flags.append(
             FrictionFlag(
                 id="tool_unmatched_calls",
                 severity="low",
                 dimension="tool_discipline",
-                event_index=None,
+                event_index=first_unmatched_idx,
                 suggestion=f"{metrics['unmatched_calls']} tool call(s) without results",
             )
         )

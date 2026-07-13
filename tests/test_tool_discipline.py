@@ -159,3 +159,90 @@ def test_interleaved_same_tool_different_ids():
     result = judge_tool_discipline(events)
     assert result.raw_metrics["tool_retries"] == 0
     assert result.raw_metrics["exact_pairs"] == 2
+
+
+# --- Friction flag event_index attribution tests ---
+
+
+def test_retry_flag_points_to_retry_call_event_index():
+    """Retry friction flag should point to the retry call's event_index."""
+    events = [
+        _make_call(0, tool_call_id="tc1", tool_name="grep"),
+        _make_result(1, tool_call_id="tc1", status="error"),
+        _make_call(2, tool_call_id="tc2", tool_name="grep"),
+        _make_result(3, tool_call_id="tc2", status="success"),
+    ]
+    result = judge_tool_discipline(events)
+    retry_flags = [f for f in result.friction_flags if f.id == "tool_retries"]
+    assert len(retry_flags) == 1
+    # The retry flag should point to event_index 2 (the retry call)
+    assert retry_flags[0].event_index == 2
+
+
+def test_timeout_flag_points_to_timed_out_result_event_index():
+    """Timeout friction flag should point to the timed-out result's event_index."""
+    events = [
+        _make_call(0, tool_call_id="tc1", tool_name="bash"),
+        _make_result(1, tool_call_id="tc1", status="timeout", tool_name="bash"),
+    ]
+    result = judge_tool_discipline(events)
+    timeout_flags = [f for f in result.friction_flags if f.id == "tool_timeout"]
+    assert len(timeout_flags) == 1
+    # The timeout flag should point to event_index 1 (the timed-out result)
+    assert timeout_flags[0].event_index == 1
+
+
+def test_redundant_flag_points_to_redundant_call_event_index():
+    """Redundant call friction flag should point to the redundant call's event_index."""
+    events = [
+        _make_call(0, tool_call_id="tc1", tool_name="grep", tool_args={"pattern": "auth"}),
+        _make_result(1, tool_call_id="tc1", status="success"),
+        _make_call(2, tool_call_id="tc2", tool_name="grep", tool_args={"pattern": "auth"}),
+        _make_result(3, tool_call_id="tc2", status="success"),
+    ]
+    result = judge_tool_discipline(events)
+    redundant_flags = [f for f in result.friction_flags if f.id == "tool_redundant"]
+    assert len(redundant_flags) == 1
+    # The redundant flag should point to event_index 2 (the redundant call)
+    assert redundant_flags[0].event_index == 2
+
+
+def test_unmatched_call_flag_points_to_unmatched_call_event_index():
+    """Unmatched call friction flag should point to the unmatched call's event_index."""
+    events = [
+        _make_call(0, tool_call_id="tc1", tool_name="grep"),
+        # No result for tc1
+    ]
+    result = judge_tool_discipline(events)
+    unmatched_flags = [f for f in result.friction_flags if f.id == "tool_unmatched_calls"]
+    assert len(unmatched_flags) == 1
+    # The unmatched flag should point to event_index 0 (the unmatched call)
+    assert unmatched_flags[0].event_index == 0
+
+
+def test_multiple_retries_point_to_first_retry():
+    """With multiple retries, the flag points to the first retry call."""
+    events = [
+        _make_call(0, tool_call_id="tc1", tool_name="grep"),
+        _make_result(1, tool_call_id="tc1", status="error"),
+        _make_call(2, tool_call_id="tc2", tool_name="grep"),
+        _make_result(3, tool_call_id="tc2", status="error"),
+        _make_call(4, tool_call_id="tc3", tool_name="grep"),
+        _make_result(5, tool_call_id="tc3", status="success"),
+    ]
+    result = judge_tool_discipline(events)
+    assert result.raw_metrics["tool_retries"] == 2
+    retry_flags = [f for f in result.friction_flags if f.id == "tool_retries"]
+    assert len(retry_flags) == 1
+    # Points to the first retry (event_index 2)
+    assert retry_flags[0].event_index == 2
+
+
+def test_no_flags_when_perfect_discipline():
+    """No friction flags when tool discipline is perfect."""
+    events = [
+        _make_call(0, tool_call_id="tc1"),
+        _make_result(1, tool_call_id="tc1", status="success"),
+    ]
+    result = judge_tool_discipline(events)
+    assert len(result.friction_flags) == 0

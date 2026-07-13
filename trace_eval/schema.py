@@ -24,6 +24,26 @@ class EventType(Enum):
 
 
 class Status(Enum):
+    """Canonical status values for tool results and events.
+
+    Semantic rules:
+    - success: Provider explicitly indicates the operation succeeded.
+      For tool results: the tool returned a result without error.
+      Emitted by converters when is_error=false/absent.
+    - error: Provider explicitly indicates the operation failed.
+      For tool results: the tool returned an error.
+      Emitted by converters when is_error=true or error patterns detected.
+    - timeout: Provider indicates the operation timed out.
+    - partial: Provider indicates partial completion.
+
+    Scoring behavior:
+    - success -> counts as successful_attempt
+    - error, timeout, partial -> counts as failed_attempt
+    - None -> unknown status; does NOT count as success or failure.
+      A tool result with status=None means the provider did not
+      explicitly indicate the outcome. This is NOT the same as success.
+    """
+
     success = "success"
     error = "error"
     partial = "partial"
