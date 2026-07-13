@@ -439,8 +439,11 @@ def convert_openclaw(input_path: Path) -> list[dict]:
                 is_error = msg.get("isError", False)
 
                 has_error = is_error or ('"status": "error"' in content or '"error":' in content)
-                # Provider-backed status: isError=True -> error,
-                # otherwise success (tool returned a result)
+                # Status inference:
+                # - isError=True -> error (explicit provider signal)
+                # - isError=False -> success (explicit provider signal)
+                # - isError absent -> heuristic: infer success from absence of error
+                #   OpenClaw typically emits isError, but absence is treated as success.
                 status = "error" if has_error else "success"
 
                 tool_args = None
@@ -580,8 +583,13 @@ def convert_cursor(input_path: Path) -> list[dict]:
             is_error = msg.get("isError", False)
 
             has_error = is_error or _cc_detect_error(content)
-            # Provider-backed status: isError=True -> error,
-            # otherwise success (tool returned a result)
+            # Status inference:
+            # - isError=True -> error (explicit provider signal)
+            # - isError=False -> success (explicit provider signal)
+            # - isError absent -> heuristic: infer success from absence of error
+            #   This is NOT an explicit provider-contract guarantee.
+            #   Cursor does not always emit isError for successful results.
+            #   Confidence is reduced when relying on heuristic inference.
             status = "error" if has_error else "success"
 
             tool_args = None
