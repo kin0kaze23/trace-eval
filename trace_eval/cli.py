@@ -15,19 +15,57 @@ from trace_eval.judges.reliability import judge_reliability
 from trace_eval.judges.retrieval import judge_retrieval
 from trace_eval.judges.tool_discipline import judge_tool_discipline
 from trace_eval.loader import load_trace_with_report
+from trace_eval.registry import JUDGE_REGISTRY
 from trace_eval.report import format_json, format_summary, format_text
 from trace_eval.scoring import (
     PROFILES,
     compute_scorecard,
 )
 
-JUDGES = {
-    "reliability": judge_reliability,
-    "efficiency": judge_efficiency,
-    "retrieval": judge_retrieval,
-    "tool_discipline": judge_tool_discipline,
-    "context": judge_context,
-}
+# ---------------------------------------------------------------------------
+# Register judges in the typed registry
+# ---------------------------------------------------------------------------
+
+JUDGE_REGISTRY.register(
+    dimension_key="reliability",
+    judge=judge_reliability,
+    display_label="Reliability",
+    order=0,
+)
+
+JUDGE_REGISTRY.register(
+    dimension_key="efficiency",
+    judge=judge_efficiency,
+    display_label="Efficiency",
+    order=1,
+)
+
+JUDGE_REGISTRY.register(
+    dimension_key="retrieval",
+    judge=judge_retrieval,
+    display_label="Retrieval",
+    order=2,
+)
+
+JUDGE_REGISTRY.register(
+    dimension_key="tool_discipline",
+    judge=judge_tool_discipline,
+    display_label="Tool Discipline",
+    order=3,
+)
+
+JUDGE_REGISTRY.register(
+    dimension_key="context",
+    judge=judge_context,
+    display_label="Context",
+    order=4,
+)
+
+# ---------------------------------------------------------------------------
+# Backward-compatible JUDGES dict (derived from registry)
+# ---------------------------------------------------------------------------
+
+JUDGES = JUDGE_REGISTRY.get_judge_dict()
 
 SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3}
 
