@@ -50,7 +50,41 @@ class Scorecard:
     unscorable_dimensions: list[str]
     missing_required_judges: list[str]
     profile: str
-    rating: str  # "Excellent", "Good", "Needs Work", "Critical"
+    rating: str  # "Excellent", "Good", "Fair", "Poor", "Critical"
+
+
+RATING_EXCELLENT = "Excellent"
+RATING_GOOD = "Good"
+RATING_FAIR = "Fair"
+RATING_POOR = "Poor"
+RATING_CRITICAL = "Critical"
+
+
+def compute_rating(score: float) -> str:
+    """Return the canonical rating label for a 0-100 score."""
+    if score >= 90:
+        return RATING_EXCELLENT
+    elif score >= 80:
+        return RATING_GOOD
+    elif score >= 60:
+        return RATING_FAIR
+    elif score >= 40:
+        return RATING_POOR
+    else:
+        return RATING_CRITICAL
+
+
+def rating_explanation(score: float) -> str:
+    """Return a plain-English explanation for a score."""
+    rating = compute_rating(score)
+    explanations = {
+        RATING_EXCELLENT: "Near-perfect session with minimal friction",
+        RATING_GOOD: "A clean session with minimal friction",
+        RATING_FAIR: "Some issues but the agent completed the task",
+        RATING_POOR: "Significant friction — errors or wasted effort",
+        RATING_CRITICAL: "Major problems — the agent struggled to complete the task",
+    }
+    return explanations.get(rating, "Unknown")
 
 
 def compute_scorecard(
@@ -92,16 +126,10 @@ def compute_scorecard(
     # Check missing required judges
     missing_required = [n for n in REQUIRED_JUDGES if n in unscorable]
 
-    # Compute rating
-    rounded_score = round(total_score, 2)
-    if rounded_score >= 90:
-        rating = "Excellent"
-    elif rounded_score >= 70:
-        rating = "Good"
-    elif rounded_score >= 40:
-        rating = "Needs Work"
-    else:
-        rating = "Critical"
+    # Round to canonical precision FIRST, then derive rating from rounded value.
+    # This ensures displayed score and rating always agree.
+    rounded_score = round(total_score, 1)
+    rating = compute_rating(rounded_score)
 
     return Scorecard(
         total_score=rounded_score,

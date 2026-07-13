@@ -48,7 +48,7 @@ After completing any meaningful task, always evaluate your work with trace-eval 
 |---------|-----|
 | `trace-eval loop` | Score latest session |
 | `trace-eval loop --apply-safe` | Auto-fix safe issues |
-| `trace-eval ci --min-score 80` | Quality gate |
+| `trace-eval ci session.jsonl --min-score 80` | Quality gate |
 | `trace-eval doctor` | Check setup |
 
 ## When to skip

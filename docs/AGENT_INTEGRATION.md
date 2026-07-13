@@ -124,7 +124,7 @@ For team workflows, add a quality gate to your CI:
 - name: Check agent quality
   run: |
     pip install trace-eval
-    trace-eval ci --min-score 80
+    trace-eval ci session.jsonl --min-score 80
 ```
 
 **What this does:**
@@ -148,7 +148,7 @@ Install it: `pip install trace-eval`
 
 Run with `--details` for a full breakdown:
 ```bash
-trace-eval loop --details
+trace-eval --details
 ```
 
 See [Troubleshooting Guide](docs/TROUBLESHOOTING.md) for more.

@@ -21,9 +21,6 @@ pyinstaller \
     --hidden-import trace_eval.judges.tool_discipline \
     --hidden-import trace_eval.judges.context \
     --hidden-import trace_eval.adapters \
-    --hidden-import trace_eval.adapters.claude_code \
-    --hidden-import trace_eval.adapters.openclaw \
-    --hidden-import trace_eval.adapters.cursor \
     --hidden-import trace_eval.adapters.generic_jsonl \
     --hidden-import trace_eval.adapters.hermes \
     --hidden-import trace_eval.convert \

@@ -11,10 +11,6 @@ dist/
 build/
 *.whl
 *.spec
-*.spec
-*.spec
-*.spec
-*.spec
 
 # Environments
 .venv/

@@ -23,8 +23,8 @@ def test_compute_all_scorable():
     }
     card = compute_scorecard(judges)
     # 80*0.35 + 90*0.20 + 70*0.20 + 85*0.15 + 75*0.10
-    # = 28 + 18 + 14 + 12.75 + 7.5 = 80.25
-    assert abs(card.total_score - 80.25) < 0.01
+    # = 28 + 18 + 14 + 12.75 + 7.5 = 80.25 -> rounded to 80.2
+    assert abs(card.total_score - 80.2) < 0.01
 
 
 def test_unscorable_optional_redistributes():
@@ -48,6 +48,8 @@ def test_unscorable_optional_redistributes():
     # reliability: 0.35/0.90 * 80 = 31.11...
     # efficiency: 0.20/0.90 * 90 = 20
     # retrieval: 0.20/0.90 * 70 = 15.56...
+    # tool_discipline: 0.15/0.90 * 85 = 14.17...
+    # Total = 80.83... -> rounded to 80.8
     # tool_discipline: 0.15/0.90 * 85 = 14.17...
     # Total ~ 80.84
     assert abs(card.total_score - 80.83) < 0.1

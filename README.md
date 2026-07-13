@@ -59,7 +59,7 @@ At a glance:
 |------|---------|
 | After a meaningful agent task | `trace-eval loop` |
 | After a frustrating run (errors, stuck, wasted tokens) | `trace-eval loop` |
-| Before merging a PR | `trace-eval ci --min-score 80` |
+| Before merging a PR | `trace-eval ci session.jsonl --min-score 80` |
 | To compare before/after | `trace-eval loop --compare before.jsonl` |
 
 ## What's a "Session Recording"?
@@ -106,7 +106,7 @@ Add to your GitHub Actions to block low-quality agent work:
 
 ```yaml
 - name: Check agent quality
-  run: trace-eval ci --min-score 80
+  run: trace-eval ci path/to/session.jsonl --min-score 80
 ```
 
 ## Commands You'll Actually Use
@@ -115,7 +115,7 @@ Add to your GitHub Actions to block low-quality agent work:
 |---------|-------------|
 | `trace-eval loop` | Score your latest agent session |
 | `trace-eval loop --apply-safe` | Auto-fix safe issues |
-| `trace-eval ci --min-score 80` | Quality gate (exits non-zero if too low) |
+| `trace-eval ci session.jsonl --min-score 80` | Quality gate (exits non-zero if too low) |
 | `trace-eval doctor` | Check your setup and find sessions |
 | `trace-eval loop --compare before.jsonl` | See if things improved |
 
