@@ -1,0 +1,12 @@
+{"event_index": 0, "actor": "system", "event_type": "session_start", "timestamp": "2026-01-15T10:00:00Z", "status": null, "session_id": "oc-sess-001", "schema_version": "v1", "trace_id": "openclaw_oc-sess-", "cwd": "/home/user/project"}
+{"event_index": 1, "actor": "user", "event_type": "message", "timestamp": "2026-01-15T10:00:01Z", "status": null, "session_id": "oc-sess-001"}
+{"event_index": 2, "actor": "assistant", "event_type": "tool_call", "timestamp": "2026-01-15T10:00:03Z", "status": null, "session_id": "oc-sess-001", "tool_name": "exec", "tool_args": {"command": "make build"}, "tool_call_id": "oc-tc-001"}
+{"event_index": 3, "actor": "assistant", "event_type": "llm_call", "timestamp": "2026-01-15T10:00:03Z", "status": null, "session_id": "oc-sess-001", "tokens_in": 1000, "tokens_out": 50}
+{"event_index": 4, "actor": "tool", "event_type": "tool_result", "timestamp": "2026-01-15T10:00:04Z", "status": "error", "session_id": "oc-sess-001", "tool_name": "exec", "tool_args": null, "tool_call_id": "oc-tc-001"}
+{"event_index": 5, "actor": "assistant", "event_type": "tool_call", "timestamp": "2026-01-15T10:00:08Z", "status": null, "session_id": "oc-sess-001", "tool_name": "exec", "tool_args": {"command": "make build"}, "tool_call_id": "oc-tc-002"}
+{"event_index": 6, "actor": "assistant", "event_type": "llm_call", "timestamp": "2026-01-15T10:00:08Z", "status": null, "session_id": "oc-sess-001", "tokens_in": 1200, "tokens_out": 50}
+{"event_index": 7, "actor": "tool", "event_type": "tool_result", "timestamp": "2026-01-15T10:00:09Z", "status": "success", "session_id": "oc-sess-001", "tool_name": "exec", "tool_args": null, "tool_call_id": "oc-tc-002"}
+{"event_index": 8, "actor": "assistant", "event_type": "tool_call", "timestamp": "2026-01-15T10:00:12Z", "status": null, "session_id": "oc-sess-001", "tool_name": "read", "tool_args": {"path": "Makefile"}, "tool_call_id": "oc-tc-003"}
+{"event_index": 9, "actor": "assistant", "event_type": "llm_call", "timestamp": "2026-01-15T10:00:12Z", "status": null, "session_id": "oc-sess-001", "tokens_in": 1500, "tokens_out": 30}
+{"event_index": 10, "actor": "tool", "event_type": "tool_result", "timestamp": "2026-01-15T10:00:13Z", "status": "success", "session_id": "oc-sess-001", "tool_name": "read", "tool_args": null, "tool_call_id": "oc-tc-003"}
+{"event_index": 11, "actor": "assistant", "event_type": "llm_call", "timestamp": "2026-01-15T10:00:15Z", "status": null, "session_id": "oc-sess-001", "tokens_in": 2000, "tokens_out": 80}

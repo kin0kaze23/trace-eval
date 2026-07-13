@@ -1,8 +1,17 @@
-"""Tool Discipline judge: Retries, redundancy, timeouts, fallbacks."""
+"""Tool Discipline judge: Retries, redundancy, timeouts, fallbacks.
+
+Uses tool call/result correlation via tool_call_id for accurate
+retry and timeout detection. Does not infer status from tool_call events.
+"""
 
 from __future__ import annotations
 
-from trace_eval.schema import Event, FrictionFlag, JudgeResult
+from trace_eval.schema import Event, EventType, FrictionFlag, JudgeResult
+from trace_eval.tool_correlation import (
+    compute_correlation_metrics,
+    correlation_confidence,
+    pair_tool_attempts,
+)
 
 
 def judge_tool_discipline(events: list[Event]) -> JudgeResult:
@@ -16,101 +25,105 @@ def judge_tool_discipline(events: list[Event]) -> JudgeResult:
             scorable=False,
         )
 
-    # Count tool retries: consecutive events with same tool_name, error then success
-    tool_retries = 0
-    tool_calls = [e for e in events if e.event_type is not None and e.event_type.value == "tool_call"]
-    for i in range(1, len(tool_calls)):
-        if (
-            tool_calls[i].tool_name == tool_calls[i - 1].tool_name
-            and tool_calls[i - 1].status is not None
-            and tool_calls[i - 1].status.value == "error"
-            and tool_calls[i].status is not None
-            and tool_calls[i].status.value == "success"
-        ):
-            tool_retries += 1
+    # Check if there are any tool-related events
+    has_tool_activity = any(e.event_type in (EventType.tool_call, EventType.tool_result) for e in events)
+    if not has_tool_activity:
+        return JudgeResult(
+            score=100.0,
+            confidence="high",
+            friction_flags=[],
+            explanation="No tool activity — perfect discipline by default",
+            raw_metrics={"tool_attempts": 0, "paired_attempts": 0},
+            scorable=True,
+        )
 
-    # Count redundant calls: adjacent same tool_name + identical tool_args
-    # Exclude retry pairs (error→success) — those are counted as retries, not redundant
-    redundant_calls = 0
-    for i in range(1, len(tool_calls)):
-        prev_is_error = tool_calls[i - 1].status is not None and tool_calls[i - 1].status.value == "error"
-        if (
-            tool_calls[i].tool_name == tool_calls[i - 1].tool_name
-            and tool_calls[i].tool_args == tool_calls[i - 1].tool_args
-            and not prev_is_error
-        ):
-            redundant_calls += 1
+    # Pair tool calls with results using correlation IDs
+    attempts = pair_tool_attempts(events)
+    metrics = compute_correlation_metrics(attempts)
+    confidence = correlation_confidence(metrics)
 
-    # Count tool timeouts
-    tool_timeouts = sum(
-        1
-        for e in events
-        if e.status is not None
-        and e.status.value == "timeout"
-        and e.event_type is not None
-        and e.event_type.value == "tool_call"
-    )
+    # Count fallback events (unchanged from original)
+    fallback_events = sum(1 for e in events if e.event_type == EventType.search_fallback)
 
-    # Count fallback events
-    fallback_events = sum(1 for e in events if e.event_type is not None and e.event_type.value == "search_fallback")
-
+    # Scoring
     score = 100.0
-    score -= min(30, 10 * tool_retries)
-    score -= min(30, 8 * redundant_calls)
-    score -= min(30, 15 * tool_timeouts)
+    score -= min(30, 10 * metrics["tool_retries"])
+    score -= min(30, 8 * metrics["redundant_calls"])
+    score -= min(30, 15 * metrics["tool_timeouts"])
     score -= min(15, 5 * fallback_events)
     score = max(0.0, score)
 
-    # Friction flags
+    # Friction flags — each points to the specific event that triggered it
     flags: list[FrictionFlag] = []
-    if tool_retries > 0:
+    if metrics["tool_retries"] > 0:
+        # Point to the first retry call's event_index for explainability
+        first_retry_idx = metrics["retry_event_indices"][0] if metrics["retry_event_indices"] else None
         flags.append(
             FrictionFlag(
                 id="tool_retries",
                 severity="medium",
                 dimension="tool_discipline",
-                event_index=tool_calls[0].event_index,
-                suggestion=f"{tool_retries} tool retry(ies) detected",
+                event_index=first_retry_idx,
+                suggestion=f"{metrics['tool_retries']} tool retry(ies) detected",
             )
         )
-    if redundant_calls > 0:
+    if metrics["redundant_calls"] > 0:
+        # Point to the first redundant call's event_index
+        first_redundant_idx = metrics["redundant_event_indices"][0] if metrics["redundant_event_indices"] else None
         flags.append(
             FrictionFlag(
                 id="tool_redundant",
                 severity="low",
                 dimension="tool_discipline",
-                event_index=tool_calls[0].event_index,
-                suggestion=f"{redundant_calls} redundant tool call(s)",
+                event_index=first_redundant_idx,
+                suggestion=f"{metrics['redundant_calls']} redundant tool call(s)",
             )
         )
-    if tool_timeouts > 0:
-        timeout_events = [
-            e
-            for e in events
-            if e.status and e.status.value == "timeout" and e.event_type and e.event_type.value == "tool_call"
-        ]
+    if metrics["tool_timeouts"] > 0:
+        # Point to the first timed-out result's event_index
+        first_timeout_idx = metrics["timeout_event_indices"][0] if metrics["timeout_event_indices"] else None
         flags.append(
             FrictionFlag(
                 id="tool_timeout",
                 severity="high",
                 dimension="tool_discipline",
-                event_index=timeout_events[0].event_index if timeout_events else None,
-                suggestion=f"{tool_timeouts} tool call(s) timed out",
+                event_index=first_timeout_idx,
+                suggestion=f"{metrics['tool_timeouts']} tool call(s) timed out",
+            )
+        )
+    if metrics["unmatched_calls"] > 0:
+        # Point to the first unmatched call's event_index
+        first_unmatched_idx = (
+            metrics["unmatched_call_event_indices"][0] if metrics["unmatched_call_event_indices"] else None
+        )
+        flags.append(
+            FrictionFlag(
+                id="tool_unmatched_calls",
+                severity="low",
+                dimension="tool_discipline",
+                event_index=first_unmatched_idx,
+                suggestion=f"{metrics['unmatched_calls']} tool call(s) without results",
             )
         )
 
+    explanation = (
+        f"Retries: {metrics['tool_retries']}. "
+        f"Redundant: {metrics['redundant_calls']}. "
+        f"Timeouts: {metrics['tool_timeouts']}. "
+        f"Fallbacks: {fallback_events}. "
+        f"Paired: {metrics['paired_attempts']}/{metrics['tool_attempts']} "
+        f"({metrics['correlation_coverage_pct']}% coverage). "
+        f"Unmatched calls: {metrics['unmatched_calls']}. "
+        f"Orphan results: {metrics['orphan_results']}."
+    )
+
     return JudgeResult(
         score=score,
-        confidence="high",
+        confidence=confidence,
         friction_flags=flags,
-        explanation=(
-            f"Retries: {tool_retries}. Redundant: {redundant_calls}. "
-            f"Timeouts: {tool_timeouts}. Fallbacks: {fallback_events}."
-        ),
+        explanation=explanation,
         raw_metrics={
-            "tool_retries": tool_retries,
-            "redundant_calls": redundant_calls,
-            "tool_timeouts": tool_timeouts,
+            **metrics,
             "fallback_events": fallback_events,
         },
         scorable=True,

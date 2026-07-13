@@ -1,0 +1,12 @@
+{"role": "user", "message": {"content": [{"type": "text", "text": "Refactor the database layer"}]}}
+{"role": "assistant", "message": {"content": [{"type": "text", "text": "I'll refactor the database layer."}], "usage": {"input": 3200, "output": 80}, "stopReason": "end_turn"}}
+{"role": "assistant", "message": {"content": [{"type": "toolCall", "name": "read_file", "arguments": {"path": "src/db.py"}, "id": null}]}}
+{"role": "toolResult", "message": {"toolName": "read_file", "toolCallId": null, "isError": false, "content": [{"type": "text", "text": "import sqlite3\ndef get_connection():\n    return sqlite3.connect('app.db')"}]}}
+{"role": "assistant", "message": {"content": [{"type": "toolCall", "name": "edit", "arguments": {"path": "src/db.py", "oldText": "import sqlite3", "newText": "import sqlite3\nfrom queue import Queue"}, "id": null}]}}
+{"role": "toolResult", "message": {"toolName": "edit", "toolCallId": null, "isError": false, "content": [{"type": "text", "text": "File updated successfully."}]}}
+{"role": "assistant", "message": {"content": [{"type": "toolCall", "name": "bash", "arguments": {"command": "python -m pytest tests/test_db.py"}, "id": null}]}}
+{"role": "toolResult", "message": {"toolName": "bash", "toolCallId": null, "isError": true, "content": [{"type": "text", "text": "exit code 1\nFAILED tests/test_db.py"}]}}
+{"role": "assistant", "message": {"content": [{"type": "text", "text": "Tests failed. Let me check the error."}], "usage": {"input": 4000, "output": 60}, "stopReason": "end_turn"}}
+{"role": "assistant", "message": {"content": [{"type": "toolCall", "name": "grep", "arguments": {"pattern": "def get_connection"}, "id": null}]}}
+{"role": "toolResult", "message": {"toolName": "grep", "toolCallId": null, "isError": false, "content": [{"type": "text", "text": "src/db.py:2:def get_connection()"}]}}
+{"role": "assistant", "message": {"content": [{"type": "text", "text": "Found the issue. The connection is not pooled."}], "usage": {"input": 5000, "output": 100}, "stopReason": "end_turn"}}

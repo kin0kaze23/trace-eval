@@ -89,7 +89,7 @@ def test_convert_cursor_tool_result_success(tmp_path):
     events = convert_cursor(sample)
     assert len(events) == 1
     assert events[0]["event_type"] == "tool_result"
-    assert events[0]["status"] is None
+    assert events[0]["status"] == "success"
 
 
 def test_cursor_auto_detect(tmp_path):
