@@ -14,10 +14,6 @@ DOC_FILES += [str(p) for p in (TRACE_EVAL_DIR / "docs").glob("*.md")]
 
 # Commands that intentionally contain placeholders or shell syntax
 ALLOWLIST_PATTERNS = [
-    "--details",
-    "path/to",
-    "session.jsonl",
-    "trace.jsonl",
     "$",
     "|",
     ">",
@@ -149,6 +145,21 @@ class TestDocCommandsValid:
 
     def test_option_on_wrong_subcommand_fails(self):
         # --latest is only on ci, not on run
+        is_valid, _ = _validate_with_parser("trace-eval run trace.jsonl --latest")
+        assert not is_valid
+
+    def test_loop_details_fails(self):
+        """trace-eval loop --details should fail (--details is not a loop option)."""
+        is_valid, _ = _validate_with_parser("trace-eval loop --details")
+        assert not is_valid
+
+    def test_unknown_option_on_ci_fails(self):
+        """trace-eval ci with unknown option should fail."""
+        is_valid, _ = _validate_with_parser("trace-eval ci path/to/session.jsonl --unknown-option")
+        assert not is_valid
+
+    def test_latest_on_run_fails(self):
+        """--latest on run subcommand should fail."""
         is_valid, _ = _validate_with_parser("trace-eval run trace.jsonl --latest")
         assert not is_valid
 

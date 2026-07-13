@@ -148,7 +148,7 @@ Install it: `pip install trace-eval`
 
 Run with `--details` for a full breakdown:
 ```bash
-trace-eval loop --details
+trace-eval --details
 ```
 
 See [Troubleshooting Guide](docs/TROUBLESHOOTING.md) for more.

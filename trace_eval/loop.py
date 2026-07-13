@@ -47,6 +47,74 @@ def _cleanup_temp_file(path):
         pass
 
 
+def _postprocess_artifact_commands(
+    fixes: list[dict[str, str]],
+    report_path: str | None,
+    trace_path: str,
+    profile: str | None,
+) -> None:
+    """Post-process generated fixes and reports in-place.
+
+    For auto-located sessions (which run_loop always is), replace
+    basename-only 'trace-eval run <name>' commands with 'trace-eval loop'
+    commands that don't depend on a specific file path.
+
+    Also fixes report output location: when no --output is specified,
+    the report is written to the current working directory instead of
+    beside the (possibly system-internal) trace file.
+    """
+    import re as _re
+
+    # Determine the profile argument for generated commands
+    profile_arg = f" --profile {profile}" if profile else ""
+
+    # Post-process fixes: replace 'trace-eval run <basename>' with 'trace-eval loop'
+    for fix in fixes:
+        if "content" in fix:
+            # Replace 'trace-eval run <anything> --profile <profile>' with 'trace-eval loop --profile <profile>'
+            fix["content"] = _re.sub(
+                r"trace-eval run \S+ --profile \S+",
+                f"trace-eval loop{profile_arg}",
+                fix["content"],
+            )
+            # Replace 'trace-eval ci <anything> --min-score' with 'trace-eval ci --latest --min-score'
+            fix["content"] = _re.sub(
+                r"trace-eval ci \S+ --min-score",
+                "trace-eval ci --latest --min-score",
+                fix["content"],
+            )
+
+    # Post-process report file: replace basename-only paths
+    if report_path:
+        report_file = None
+        try:
+            from pathlib import Path as _Path
+
+            rp = _Path(report_path)
+            if rp.exists():
+                report_file = rp.read_text()
+        except Exception:
+            pass
+
+        if report_file:
+            # Replace 'trace-eval run <basename>' with 'trace-eval loop'
+            report_file = _re.sub(
+                r"trace-eval run \S+ --profile \S+",
+                f"trace-eval loop{profile_arg}",
+                report_file,
+            )
+            # Replace 'trace-eval ci <basename>' with 'trace-eval ci --latest'
+            report_file = _re.sub(
+                r"trace-eval ci \S+ --min-score",
+                "trace-eval ci --latest --min-score",
+                report_file,
+            )
+            try:
+                rp.write_text(report_file)
+            except Exception:
+                pass
+
+
 def run_loop(
     agent_type: str = "all",
     hours: int = 48,
@@ -174,6 +242,7 @@ def run_loop(
         if apply_safe:
             try:
                 fixes = apply_safe_fixes(actions, card, Path(trace_path))
+                _postprocess_artifact_commands(fixes, None, trace_path, profile)
                 result["safe_fixes_applied"] = fixes
             except Exception as e:
                 result.setdefault("_warnings", []).append(f"apply_safe failed: {e}")
@@ -203,8 +272,9 @@ def run_loop(
                 if output_dir:
                     report_out = Path(output_dir) / f"{Path(trace_path).stem}_report.md"
                 else:
-                    report_out = None
+                    report_out = Path.cwd() / f"{Path(trace_path).stem}_remediation.md"
                 report_path = generate_remediation_report(actions, card, Path(trace_path), output_path=report_out)
+                _postprocess_artifact_commands([], report_path, trace_path, profile)
                 result["report_path"] = report_path
             except Exception as e:
                 result.setdefault("_warnings", []).append(f"Report generation failed: {e}")
