@@ -484,3 +484,70 @@ class TestArtifactCommandPostprocessing:
         report_content = open(report_path).read()
         assert "trace-eval run" not in report_content, "Report uses 'run' instead of 'loop'"
         assert "trace-eval loop" in report_content, "Report should use 'loop'"
+
+
+class TestRealReportCommands:
+    """Exercise the real generate_remediation_report() and verify command rewriting."""
+
+    def _run_with_report(self, tmp_path, profile=None):
+        """Run run_loop with real report generation, return report content."""
+        trace = _make_canonical_trace(tmp_path)
+        output_dir = tmp_path / "output"
+        output_dir.mkdir()
+
+        with patch("trace_eval.loop.locate", return_value=[_FakeLocation(trace)]):
+            result = run_loop(
+                agent_type="all",
+                hours=1,
+                profile=profile,
+                compare_path=None,
+                apply_safe=True,
+                report=True,
+                output_dir=str(output_dir),
+            )
+        # Find the report file
+        report_files = list(output_dir.glob("*_report.md")) + list(output_dir.glob("*_remediation.md"))
+        assert len(report_files) > 0, "No report file generated"
+        return report_files[0].read_text(), result
+
+    def test_no_trace_eval_run_in_report(self, tmp_path):
+        """Report must not contain any 'trace-eval run' commands."""
+        content, _ = self._run_with_report(tmp_path)
+        assert "trace-eval run" not in content, f"Report contains 'trace-eval run': {content}"
+
+    def test_report_uses_loop(self, tmp_path):
+        """Report should use 'trace-eval loop' instead of 'trace-eval run'."""
+        content, _ = self._run_with_report(tmp_path)
+        assert "trace-eval loop" in content, f"Report does not contain 'trace-eval loop': {content}"
+
+    def test_report_uses_ci_latest(self, tmp_path):
+        """Report CI recommendation should use 'trace-eval ci --latest'."""
+        content, _ = self._run_with_report(tmp_path)
+        assert "trace-eval ci --latest" in content, f"Report does not contain 'trace-eval ci --latest': {content}"
+
+    def test_no_basename_in_commands(self, tmp_path):
+        """Report commands must not contain the source basename."""
+        content, _ = self._run_with_report(tmp_path)
+        # The trace file is named "trace.jsonl", so "trace.jsonl" should not
+        # appear in any trace-eval command
+        assert "trace-eval run trace.jsonl" not in content
+        assert "trace-eval ci trace.jsonl" not in content
+
+    def test_profile_preserved_when_remediation_recommends(self, tmp_path):
+        """When remediation recommends coding_agent, profile must be preserved."""
+        content, _ = self._run_with_report(tmp_path, profile=None)
+        # If the report recommends coding_agent, the loop command should include it
+        if "coding_agent" in content:
+            assert "trace-eval loop --profile coding_agent" in content, (
+                f"Profile coding_agent not preserved in loop command: {content}"
+            )
+
+    def test_safe_fix_preserves_profile(self, tmp_path):
+        """Safe fix commands should preserve profile from original command."""
+        content, result = self._run_with_report(tmp_path, profile=None)
+        fixes = result.get("safe_fixes_applied", [])
+        for fix in fixes:
+            cmd = fix.get("content", "")
+            if "coding_agent" in cmd:
+                assert "trace-eval loop --profile coding_agent" in cmd, f"Profile not preserved in safe fix: {cmd}"
+            assert "trace-eval run" not in cmd, f"Safe fix uses 'run' instead of 'loop': {cmd}"

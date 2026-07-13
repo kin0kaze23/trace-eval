@@ -55,64 +55,58 @@ def _postprocess_artifact_commands(
 ) -> None:
     """Post-process generated fixes and reports in-place.
 
-    For auto-located sessions (which run_loop always is), replace
-    basename-only 'trace-eval run <name>' commands with 'trace-eval loop'
-    commands that don't depend on a specific file path.
+    For auto-located sessions (which run_loop always is), replace ALL forms of
+    'trace-eval run <path>' with 'trace-eval loop' and 'trace-eval ci <path>'
+    with 'trace-eval ci --latest'.
 
-    Also fixes report output location: when no --output is specified,
-    the report is written to the current working directory instead of
-    beside the (possibly system-internal) trace file.
+    Preserves the --profile value from the original generated command, not just
+    from the run_loop(profile=...) argument, because remediation may recommend
+    coding_agent when the invocation profile was None.
     """
     import re as _re
 
-    # Determine the profile argument for generated commands
-    profile_arg = f" --profile {profile}" if profile else ""
+    default_profile = profile or ""
 
-    # Post-process fixes: replace 'trace-eval run <basename>' with 'trace-eval loop'
+    def _rewrite_run_cmd(match):
+        """Rewrite 'trace-eval run <path>' to 'trace-eval loop'."""
+        # Extract --profile from the original command if present
+        cmd_profile = match.group(2) or default_profile or ""
+        profile_arg = f" --profile {cmd_profile}" if cmd_profile else ""
+        return f"trace-eval loop{profile_arg}"
+
+    # Pattern matches all forms:
+    #   trace-eval run <path>
+    #   trace-eval run <path> --profile <profile>
+    #   trace-eval run <path> --summary
+    #   trace-eval run <path> --profile <profile> --summary
+    run_pattern = r"trace-eval run \S+( --profile (\S+))?( --summary)?"
+
+    # Pattern matches 'trace-eval ci <path>' where <path> is not --latest
+    # Preserves flags after the path (--min-score, --profile, etc.)
+    ci_pattern = r"trace-eval ci (?!--)(\S+)"
+
+    def _process_content(content: str) -> str:
+        content = _re.sub(run_pattern, _rewrite_run_cmd, content)
+        content = _re.sub(ci_pattern, "trace-eval ci --latest", content)
+        return content
+
+    # Post-process fixes
     for fix in fixes:
         if "content" in fix:
-            # Replace 'trace-eval run <anything> --profile <profile>' with 'trace-eval loop --profile <profile>'
-            fix["content"] = _re.sub(
-                r"trace-eval run \S+ --profile \S+",
-                f"trace-eval loop{profile_arg}",
-                fix["content"],
-            )
-            # Replace 'trace-eval ci <anything> --min-score' with 'trace-eval ci --latest --min-score'
-            fix["content"] = _re.sub(
-                r"trace-eval ci \S+ --min-score",
-                "trace-eval ci --latest --min-score",
-                fix["content"],
-            )
+            fix["content"] = _process_content(fix["content"])
 
-    # Post-process report file: replace basename-only paths
+    # Post-process report file
     if report_path:
-        report_file = None
-        try:
-            from pathlib import Path as _Path
+        from pathlib import Path as _Path
 
+        try:
             rp = _Path(report_path)
             if rp.exists():
-                report_file = rp.read_text()
+                content = rp.read_text()
+                content = _process_content(content)
+                rp.write_text(content)
         except Exception:
             pass
-
-        if report_file:
-            # Replace 'trace-eval run <basename>' with 'trace-eval loop'
-            report_file = _re.sub(
-                r"trace-eval run \S+ --profile \S+",
-                f"trace-eval loop{profile_arg}",
-                report_file,
-            )
-            # Replace 'trace-eval ci <basename>' with 'trace-eval ci --latest'
-            report_file = _re.sub(
-                r"trace-eval ci \S+ --min-score",
-                "trace-eval ci --latest --min-score",
-                report_file,
-            )
-            try:
-                rp.write_text(report_file)
-            except Exception:
-                pass
 
 
 def run_loop(
