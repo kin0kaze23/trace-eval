@@ -118,6 +118,7 @@ def convert_claude_code(input_path: Path) -> list[dict]:
                             is_error = block.get("isError", False)
                             has_error = is_error or _cc_detect_error(tool_result_text)
                             status = "error" if has_error else None
+                            tool_use_id = block.get("tool_use_id")
 
                             tool_args = None
                             if tool_result_text.strip().startswith("{"):
@@ -137,6 +138,7 @@ def convert_claude_code(input_path: Path) -> list[dict]:
                                     "status": status,
                                     "session_id": session_id,
                                     "tool_args": tool_args,
+                                    "tool_call_id": tool_use_id,
                                 }
                             )
                             idx += 1
@@ -191,6 +193,7 @@ def convert_claude_code(input_path: Path) -> list[dict]:
                 if isinstance(block, dict) and block.get("type") == "tool_use":
                     tool_name = block.get("name", "unknown")
                     tool_input = block.get("input", {})
+                    tool_use_id = block.get("id")
                     canonical.append(
                         {
                             "event_index": idx,
@@ -201,6 +204,7 @@ def convert_claude_code(input_path: Path) -> list[dict]:
                             "session_id": session_id,
                             "tool_name": tool_name,
                             "tool_args": tool_input if isinstance(tool_input, dict) else None,
+                            "tool_call_id": tool_use_id,
                         }
                     )
                     idx += 1
@@ -370,6 +374,7 @@ def convert_openclaw(input_path: Path) -> list[dict]:
                 for tc in tool_calls:
                     tool_name = tc.get("name", "unknown")
                     tool_args = tc.get("arguments", {})
+                    tool_call_id = tc.get("id")
                     canonical.append(
                         {
                             "event_index": idx,
@@ -380,6 +385,7 @@ def convert_openclaw(input_path: Path) -> list[dict]:
                             "session_id": session_id,
                             "tool_name": tool_name,
                             "tool_args": tool_args if isinstance(tool_args, dict) else None,
+                            "tool_call_id": tool_call_id,
                         }
                     )
                     idx += 1
@@ -415,6 +421,7 @@ def convert_openclaw(input_path: Path) -> list[dict]:
 
             elif role == "toolResult":
                 tool_name = msg.get("toolName", "unknown")
+                tool_call_id_ref = msg.get("toolCallId") or msg.get("tool_use_id") or msg.get("id")
                 content_texts = []
                 for c in content_items:
                     if isinstance(c, dict):
@@ -445,6 +452,7 @@ def convert_openclaw(input_path: Path) -> list[dict]:
                         "session_id": session_id,
                         "tool_name": tool_name,
                         "tool_args": tool_args,
+                        "tool_call_id": tool_call_id_ref,
                     }
                 )
                 idx += 1
@@ -505,6 +513,7 @@ def convert_cursor(input_path: Path) -> list[dict]:
                 if isinstance(c, dict) and c.get("type") == "toolCall":
                     tool_name = c.get("name", "unknown")
                     tool_args = c.get("arguments", {})
+                    tool_call_id = c.get("id")
                     canonical.append(
                         {
                             "event_index": idx,
@@ -515,6 +524,7 @@ def convert_cursor(input_path: Path) -> list[dict]:
                             "session_id": session_id,
                             "tool_name": tool_name,
                             "tool_args": tool_args if isinstance(tool_args, dict) else None,
+                            "tool_call_id": tool_call_id,
                         }
                     )
                     idx += 1
@@ -550,6 +560,7 @@ def convert_cursor(input_path: Path) -> list[dict]:
 
         elif role == "toolResult":
             tool_name = msg.get("toolName", "unknown")
+            tool_call_id_ref = msg.get("toolCallId") or msg.get("tool_use_id") or msg.get("id")
             content_texts = []
             for c in content_items:
                 if isinstance(c, dict):
@@ -580,6 +591,7 @@ def convert_cursor(input_path: Path) -> list[dict]:
                     "session_id": session_id,
                     "tool_name": tool_name,
                     "tool_args": tool_args,
+                    "tool_call_id": tool_call_id_ref,
                 }
             )
             idx += 1

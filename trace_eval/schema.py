@@ -76,6 +76,7 @@ class FieldCoverage:
             "context_tokens",
             "tool_name",
             "tool_args",
+            "tool_call_id",
             "retrieval_entrypoint",
             "retrieval_steps",
             "deprecated_file_touched",
@@ -111,6 +112,7 @@ class Event:
     parent_span_id: str | None = None
     tool_name: str | None = None
     tool_args: dict[str, Any] | None = None
+    tool_call_id: str | None = None
     latency_ms: int | None = None
     error_type: str | None = None
     tokens_in: int | None = None
@@ -164,6 +166,7 @@ class Event:
             parent_span_id=data.get("parent_span_id"),
             tool_name=data.get("tool_name"),
             tool_args=data.get("tool_args"),
+            tool_call_id=data.get("tool_call_id"),
             latency_ms=int(data["latency_ms"]) if "latency_ms" in data and data["latency_ms"] is not None else None,
             error_type=data.get("error_type"),
             tokens_in=int(data["tokens_in"]) if "tokens_in" in data and data["tokens_in"] is not None else None,
