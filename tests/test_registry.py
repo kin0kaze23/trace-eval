@@ -1,7 +1,5 @@
 """Tests for typed converter and judge registries."""
 
-from __future__ import annotations
-
 import pytest
 
 from trace_eval.registry import (
