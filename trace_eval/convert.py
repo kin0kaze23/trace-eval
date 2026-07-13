@@ -439,8 +439,13 @@ def convert_openclaw(input_path: Path) -> list[dict]:
                 is_error = msg.get("isError", False)
 
                 has_error = is_error or ('"status": "error"' in content or '"error":' in content)
-                # Provider-backed status: isError=True -> error,
-                # otherwise success (tool returned a result)
+                # Status inference:
+                # - isError=True -> error
+                # - otherwise infer success when no error pattern is detected
+                # - when isError is absent, this is heuristic rather than an explicit
+                #   provider-contract guarantee
+                # - the current canonical event does not preserve whether this inference
+                #   came from an explicit false value or from an absent field
                 status = "error" if has_error else "success"
 
                 tool_args = None
@@ -580,8 +585,13 @@ def convert_cursor(input_path: Path) -> list[dict]:
             is_error = msg.get("isError", False)
 
             has_error = is_error or _cc_detect_error(content)
-            # Provider-backed status: isError=True -> error,
-            # otherwise success (tool returned a result)
+            # Status inference:
+            # - isError=True -> error
+            # - otherwise infer success when no error pattern is detected
+            # - when isError is absent, this is heuristic rather than an explicit
+            #   provider-contract guarantee
+            # - the current canonical event does not preserve whether this inference
+            #   came from an explicit false value or from an absent field
             status = "error" if has_error else "success"
 
             tool_args = None
