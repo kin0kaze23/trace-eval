@@ -39,9 +39,7 @@ class ConverterEntry:
         canonical_norm = self.canonical_name.lower().replace("-", "_").replace(" ", "_")
         if normalized == canonical_norm:
             return True
-        return normalized in {
-            a.lower().replace("-", "_").replace(" ", "_") for a in self.aliases
-        }
+        return normalized in {a.lower().replace("-", "_").replace(" ", "_") for a in self.aliases}
 
 
 class ConverterRegistry:
@@ -80,8 +78,7 @@ class ConverterRegistry:
         if canonical_norm in self._entries:
             existing = self._entries[canonical_norm].canonical_name
             raise ValueError(
-                f"Duplicate converter canonical name: {canonical_name!r} "
-                f"(already registered as {existing!r})"
+                f"Duplicate converter canonical name: {canonical_name!r} (already registered as {existing!r})"
             )
 
         # Check duplicate aliases
@@ -89,10 +86,7 @@ class ConverterRegistry:
             alias_norm = alias.lower().replace("-", "_").replace(" ", "_")
             if alias_norm in self._alias_map:
                 existing_canonical = self._alias_map[alias_norm]
-                raise ValueError(
-                    f"Duplicate converter alias: {alias!r} "
-                    f"(already claimed by {existing_canonical!r})"
-                )
+                raise ValueError(f"Duplicate converter alias: {alias!r} (already claimed by {existing_canonical!r})")
 
         # Register
         self._entries[canonical_norm] = entry
@@ -118,10 +112,7 @@ class ConverterRegistry:
             return self._entries[canonical].converter
 
         supported = sorted(self._entries.keys())
-        raise KeyError(
-            f"Unknown converter format: {name!r}. "
-            f"Supported formats: {supported}"
-        )
+        raise KeyError(f"Unknown converter format: {name!r}. Supported formats: {supported}")
 
     def is_supported(self, name: str) -> bool:
         """Check if a format name is supported."""
@@ -169,9 +160,7 @@ class JudgeEntry:
     def __post_init__(self) -> None:
         if not self.display_label:
             # Auto-generate from dimension key
-            object.__setattr__(
-                self, "display_label", self.dimension_key.replace("_", " ").title()
-            )
+            object.__setattr__(self, "display_label", self.dimension_key.replace("_", " ").title())
 
 
 class JudgeRegistry:
@@ -218,10 +207,7 @@ class JudgeRegistry:
         """
         if dimension_key not in self._entries:
             available = sorted(self._entries.keys())
-            raise KeyError(
-                f"Unknown judge dimension: {dimension_key!r}. "
-                f"Available dimensions: {available}"
-            )
+            raise KeyError(f"Unknown judge dimension: {dimension_key!r}. Available dimensions: {available}")
         return self._entries[dimension_key].judge
 
     def is_registered(self, dimension_key: str) -> bool:
@@ -237,7 +223,8 @@ class JudgeRegistry:
     def ordered_keys(self) -> list[str]:
         """Return dimension keys sorted by order field (stable output order)."""
         return [
-            k for k, _ in sorted(
+            k
+            for k, _ in sorted(
                 self._entries.items(),
                 key=lambda item: (item[1].order, item[0]),
             )
