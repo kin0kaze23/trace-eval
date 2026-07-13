@@ -1,0 +1,16 @@
+{"event_index": 0, "actor": "user", "event_type": "message", "timestamp": "", "status": null, "session_id": "cursor_native", "schema_version": "v1", "trace_id": "cursor_cursor_n"}
+{"event_index": 1, "actor": "assistant", "event_type": "llm_call", "timestamp": "", "status": null, "session_id": "cursor_native", "tokens_in": 3200, "tokens_out": 80}
+{"event_index": 2, "actor": "assistant", "event_type": "tool_call", "timestamp": "", "status": null, "session_id": "cursor_native", "tool_name": "read_file", "tool_args": {"path": "src/db.py"}, "tool_call_id": null}
+{"event_index": 3, "actor": "assistant", "event_type": "llm_call", "timestamp": "", "status": null, "session_id": "cursor_native", "tokens_in": null, "tokens_out": null}
+{"event_index": 4, "actor": "tool", "event_type": "tool_result", "timestamp": "", "status": "success", "session_id": "cursor_native", "tool_name": "read_file", "tool_args": null, "tool_call_id": null}
+{"event_index": 5, "actor": "assistant", "event_type": "tool_call", "timestamp": "", "status": null, "session_id": "cursor_native", "tool_name": "edit", "tool_args": {"path": "src/db.py", "oldText": "import sqlite3", "newText": "import sqlite3\nfrom queue import Queue"}, "tool_call_id": null}
+{"event_index": 6, "actor": "assistant", "event_type": "llm_call", "timestamp": "", "status": null, "session_id": "cursor_native", "tokens_in": null, "tokens_out": null}
+{"event_index": 7, "actor": "tool", "event_type": "tool_result", "timestamp": "", "status": "success", "session_id": "cursor_native", "tool_name": "edit", "tool_args": null, "tool_call_id": null}
+{"event_index": 8, "actor": "assistant", "event_type": "tool_call", "timestamp": "", "status": null, "session_id": "cursor_native", "tool_name": "bash", "tool_args": {"command": "python -m pytest tests/test_db.py"}, "tool_call_id": null}
+{"event_index": 9, "actor": "assistant", "event_type": "llm_call", "timestamp": "", "status": null, "session_id": "cursor_native", "tokens_in": null, "tokens_out": null}
+{"event_index": 10, "actor": "tool", "event_type": "tool_result", "timestamp": "", "status": "error", "session_id": "cursor_native", "tool_name": "bash", "tool_args": null, "tool_call_id": null}
+{"event_index": 11, "actor": "assistant", "event_type": "llm_call", "timestamp": "", "status": null, "session_id": "cursor_native", "tokens_in": 4000, "tokens_out": 60}
+{"event_index": 12, "actor": "assistant", "event_type": "tool_call", "timestamp": "", "status": null, "session_id": "cursor_native", "tool_name": "grep", "tool_args": {"pattern": "def get_connection"}, "tool_call_id": null}
+{"event_index": 13, "actor": "assistant", "event_type": "llm_call", "timestamp": "", "status": null, "session_id": "cursor_native", "tokens_in": null, "tokens_out": null}
+{"event_index": 14, "actor": "tool", "event_type": "tool_result", "timestamp": "", "status": "success", "session_id": "cursor_native", "tool_name": "grep", "tool_args": null, "tool_call_id": null}
+{"event_index": 15, "actor": "assistant", "event_type": "llm_call", "timestamp": "", "status": null, "session_id": "cursor_native", "tokens_in": 5000, "tokens_out": 100}

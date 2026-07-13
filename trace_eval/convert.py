@@ -117,7 +117,9 @@ def convert_claude_code(input_path: Path) -> list[dict]:
 
                             is_error = block.get("isError", False)
                             has_error = is_error or _cc_detect_error(tool_result_text)
-                            status = "error" if has_error else None
+                            # Provider-backed status: isError=True -> error,
+                            # otherwise success (tool returned a result)
+                            status = "error" if has_error else "success"
                             tool_use_id = block.get("tool_use_id")
 
                             tool_args = None
@@ -261,7 +263,9 @@ def convert_claude_code(input_path: Path) -> list[dict]:
 
             # Detect error status
             has_error = is_error or _cc_detect_error(text)
-            status = "error" if has_error else None
+            # Provider-backed status: isError=True -> error,
+            # otherwise success (tool returned a result)
+            status = "error" if has_error else "success"
 
             # Try to parse tool_args from first text block
             tool_args = None
@@ -431,7 +435,9 @@ def convert_openclaw(input_path: Path) -> list[dict]:
                 is_error = msg.get("isError", False)
 
                 has_error = is_error or ('"status": "error"' in content or '"error":' in content)
-                status = "error" if has_error else None
+                # Provider-backed status: isError=True -> error,
+                # otherwise success (tool returned a result)
+                status = "error" if has_error else "success"
 
                 tool_args = None
                 if content.strip().startswith("{"):
@@ -570,7 +576,9 @@ def convert_cursor(input_path: Path) -> list[dict]:
             is_error = msg.get("isError", False)
 
             has_error = is_error or _cc_detect_error(content)
-            status = "error" if has_error else None
+            # Provider-backed status: isError=True -> error,
+            # otherwise success (tool returned a result)
+            status = "error" if has_error else "success"
 
             tool_args = None
             if content.strip().startswith("{"):

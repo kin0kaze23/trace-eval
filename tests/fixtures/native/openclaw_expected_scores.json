@@ -1,0 +1,16 @@
+{
+  "tool_discipline": {
+    "score": 90.0,
+    "exact_pairs": 3,
+    "heuristic_pairs": 0,
+    "unmatched_calls": 0,
+    "orphan_results": 0,
+    "tool_retries": 1,
+    "redundant_calls": 0,
+    "tool_timeouts": 0,
+    "successful_attempts": 2,
+    "failed_attempts": 1,
+    "correlation_coverage_pct": 100.0,
+    "confidence": "high"
+  }
+}

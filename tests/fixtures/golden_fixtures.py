@@ -1,4 +1,8 @@
-"""Golden canonical fixture with tool call/result correlation."""
+"""Scenario fixtures for tool call/result correlation testing.
+
+These are synthetic canonical events for unit-testing specific correlation
+scenarios. For real provider golden fixtures, see tests/fixtures/native/.
+"""
 
 import json
 from pathlib import Path

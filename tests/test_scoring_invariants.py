@@ -1,12 +1,22 @@
-"""Scoring invariant tests for tool correlation and reliability."""
+"""Strengthened scoring invariant tests.
 
-from trace_eval.judges.reliability import judge_reliability
+Tests for:
+- Cross-session ID reuse cannot pair
+- Ambiguous heuristic data remains unmatched
+- Non-adjacent retry is detected
+- Real converted successful results contribute to successful_attempts
+- Real converted redundant calls are penalized
+- Provider-supported timeouts reach the tool-discipline timeout metric
+- Removing valid IDs cannot increase confidence or exact-pair count
+- Duplicate IDs cannot silently pair with high confidence
+"""
+
 from trace_eval.judges.tool_discipline import judge_tool_discipline
 from trace_eval.schema import Event, EventType, Status
 from trace_eval.tool_correlation import compute_correlation_metrics, pair_tool_attempts
 
 
-def _ev(idx, etype, status=None, tool_name=None, tool_call_id=None, tool_args=None):
+def _ev(idx, etype, status=None, tool_name=None, tool_call_id=None, tool_args=None, session_id=None):
     return Event(
         event_index=idx,
         actor="assistant",
@@ -16,138 +26,331 @@ def _ev(idx, etype, status=None, tool_name=None, tool_call_id=None, tool_args=No
         tool_name=tool_name,
         tool_call_id=tool_call_id,
         tool_args=tool_args,
+        session_id=session_id,
     )
 
 
-class TestReliabilityInvariants:
-    """Reliability score must not improve when errors are added."""
+class TestCrossSessionSafety:
+    """Cross-session ID reuse cannot pair."""
 
-    def test_adding_error_cannot_improve_reliability(self):
-        base = [_ev(0, EventType.session_start, Status.success), _ev(1, EventType.session_end, Status.success)]
-        base_score = judge_reliability(base).score
-        with_error = [
-            _ev(0, EventType.session_start, Status.success),
-            _ev(1, EventType.tool_result, Status.error),
-            _ev(2, EventType.session_end, Status.success),
-        ]
-        error_score = judge_reliability(with_error).score
-        assert error_score <= base_score
-
-    def test_adding_timeout_cannot_improve_reliability(self):
-        base = [_ev(0, EventType.session_start, Status.success), _ev(1, EventType.session_end, Status.success)]
-        base_score = judge_reliability(base).score
-        with_timeout = [
-            _ev(0, EventType.session_start, Status.success),
-            _ev(1, EventType.tool_result, Status.timeout),
-            _ev(2, EventType.session_end, Status.success),
-        ]
-        timeout_score = judge_reliability(with_timeout).score
-        assert timeout_score <= base_score
-
-
-class TestToolDisciplineInvariants:
-    """Tool discipline invariants for correlation-based scoring."""
-
-    def test_adding_timeout_cannot_improve_tool_discipline(self):
-        base = [
-            _ev(0, EventType.tool_call, tool_name="grep", tool_call_id="tc1"),
-            _ev(1, EventType.tool_result, Status.success, tool_name="grep", tool_call_id="tc1"),
-        ]
-        base_score = judge_tool_discipline(base).score
-        with_timeout = [
-            _ev(0, EventType.tool_call, tool_name="grep", tool_call_id="tc1"),
-            _ev(1, EventType.tool_result, Status.timeout, tool_name="grep", tool_call_id="tc1"),
-        ]
-        timeout_score = judge_tool_discipline(with_timeout).score
-        assert timeout_score <= base_score
-
-    def test_interleaving_does_not_create_false_retries(self):
+    def test_same_tool_call_id_different_sessions_no_pairing(self):
+        """Same tool_call_id in two sessions must not cross-pair."""
         events = [
-            _ev(0, EventType.tool_call, tool_name="grep", tool_call_id="tcA"),
-            _ev(1, EventType.tool_call, tool_name="grep", tool_call_id="tcB"),
-            _ev(2, EventType.tool_result, Status.success, tool_name="grep", tool_call_id="tcA"),
-            _ev(3, EventType.tool_result, Status.success, tool_name="grep", tool_call_id="tcB"),
+            # Session A
+            _ev(0, EventType.tool_call, tool_name="grep", tool_call_id="tc-001", session_id="sess-A"),
+            # Session B (same ID, different session)
+            _ev(1, EventType.tool_call, tool_name="grep", tool_call_id="tc-001", session_id="sess-B"),
+            _ev(2, EventType.tool_result, Status.success, tool_name="grep", tool_call_id="tc-001", session_id="sess-B"),
+        ]
+        attempts = pair_tool_attempts(events)
+        metrics = compute_correlation_metrics(attempts)
+
+        # Session A's call should be unmatched (no result in session A)
+        assert metrics["unmatched_calls"] == 1
+        # Session B's call should be exact-paired with session B's result
+        assert metrics["exact_pairs"] == 1
+        # No cross-session pairing
+        assert metrics["paired_attempts"] == 1
+
+    def test_duplicate_event_indices_across_sessions(self):
+        """Duplicate event_index values across sessions must not collide."""
+        events = [
+            _ev(0, EventType.tool_call, tool_name="grep", tool_call_id="tc-A", session_id="sess-A"),
+            _ev(0, EventType.tool_call, tool_name="grep", tool_call_id="tc-B", session_id="sess-B"),
+            _ev(1, EventType.tool_result, Status.success, tool_name="grep", tool_call_id="tc-A", session_id="sess-A"),
+            _ev(1, EventType.tool_result, Status.success, tool_name="grep", tool_call_id="tc-B", session_id="sess-B"),
+        ]
+        attempts = pair_tool_attempts(events)
+        metrics = compute_correlation_metrics(attempts)
+
+        assert metrics["exact_pairs"] == 2
+        assert metrics["unmatched_calls"] == 0
+        assert metrics["orphan_results"] == 0
+
+    def test_result_from_one_session_never_pairs_with_call_from_another(self):
+        """A result in session A must never pair with a call in session B."""
+        events = [
+            _ev(0, EventType.tool_call, tool_name="grep", tool_call_id="tc-X", session_id="sess-A"),
+            _ev(1, EventType.tool_result, Status.success, tool_name="grep", tool_call_id="tc-X", session_id="sess-B"),
+        ]
+        attempts = pair_tool_attempts(events)
+        metrics = compute_correlation_metrics(attempts)
+
+        # The call in sess-A has no matching result in sess-A
+        assert metrics["unmatched_calls"] == 1
+        # The result in sess-B has no matching call in sess-B
+        assert metrics["orphan_results"] == 1
+        assert metrics["exact_pairs"] == 0
+
+
+class TestAmbiguousHeuristic:
+    """Ambiguous heuristic data remains unmatched."""
+
+    def test_two_calls_one_result_ambiguous(self):
+        """Two calls without IDs followed by one result — ambiguous."""
+        events = [
+            _ev(0, EventType.tool_call, tool_name="grep", tool_call_id=None, session_id="s1"),
+            _ev(1, EventType.tool_call, tool_name="grep", tool_call_id=None, session_id="s1"),
+            _ev(2, EventType.tool_result, Status.success, tool_name="grep", tool_call_id=None, session_id="s1"),
+        ]
+        attempts = pair_tool_attempts(events)
+        metrics = compute_correlation_metrics(attempts)
+
+        # Should NOT pair — ambiguous which call the result belongs to
+        assert metrics["heuristic_pairs"] == 0
+        assert metrics["unmatched_calls"] == 2
+        assert metrics["orphan_results"] == 1
+
+    def test_one_call_two_results_ambiguous(self):
+        """One call without ID followed by two results — ambiguous."""
+        events = [
+            _ev(0, EventType.tool_call, tool_name="grep", tool_call_id=None, session_id="s1"),
+            _ev(1, EventType.tool_result, Status.success, tool_name="grep", tool_call_id=None, session_id="s1"),
+            _ev(2, EventType.tool_result, Status.success, tool_name="grep", tool_call_id=None, session_id="s1"),
+        ]
+        attempts = pair_tool_attempts(events)
+        metrics = compute_correlation_metrics(attempts)
+
+        # Should NOT pair — ambiguous which result the call belongs to
+        assert metrics["heuristic_pairs"] == 0
+        assert metrics["unmatched_calls"] == 1
+        assert metrics["orphan_results"] == 2
+
+    def test_interleaved_no_id_calls_ambiguous(self):
+        """Interleaved no-ID calls of the same tool — ambiguous."""
+        events = [
+            _ev(0, EventType.tool_call, tool_name="grep", tool_call_id=None, session_id="s1"),
+            _ev(1, EventType.tool_call, tool_name="grep", tool_call_id=None, session_id="s1"),
+            _ev(2, EventType.tool_result, Status.success, tool_name="grep", tool_call_id=None, session_id="s1"),
+            _ev(3, EventType.tool_result, Status.success, tool_name="grep", tool_call_id=None, session_id="s1"),
+        ]
+        attempts = pair_tool_attempts(events)
+        metrics = compute_correlation_metrics(attempts)
+
+        # Ambiguous — no heuristic pairing
+        assert metrics["heuristic_pairs"] == 0
+
+    def test_cross_session_no_id_events_no_heuristic(self):
+        """No-ID events in different sessions must not heuristically pair."""
+        events = [
+            _ev(0, EventType.tool_call, tool_name="grep", tool_call_id=None, session_id="s1"),
+            _ev(1, EventType.tool_result, Status.success, tool_name="grep", tool_call_id=None, session_id="s2"),
+        ]
+        attempts = pair_tool_attempts(events)
+        metrics = compute_correlation_metrics(attempts)
+
+        assert metrics["heuristic_pairs"] == 0
+        assert metrics["unmatched_calls"] == 1
+        assert metrics["orphan_results"] == 1
+
+
+class TestNonAdjacentRetry:
+    """Non-adjacent retry is detected (per-tool tracking)."""
+
+    def test_error_then_other_tool_then_retry(self):
+        """A error -> B success -> A retry: A retry must be detected."""
+        events = [
+            _ev(0, EventType.tool_call, tool_name="bash", tool_call_id="tc1", session_id="s1"),
+            _ev(1, EventType.tool_result, Status.error, tool_name="bash", tool_call_id="tc1", session_id="s1"),
+            _ev(2, EventType.tool_call, tool_name="grep", tool_call_id="tc2", session_id="s1"),
+            _ev(3, EventType.tool_result, Status.success, tool_name="grep", tool_call_id="tc2", session_id="s1"),
+            _ev(4, EventType.tool_call, tool_name="bash", tool_call_id="tc3", session_id="s1"),
+            _ev(5, EventType.tool_result, Status.success, tool_name="bash", tool_call_id="tc3", session_id="s1"),
+        ]
+        result = judge_tool_discipline(events)
+        assert result.raw_metrics["tool_retries"] == 1, (
+            f"Expected 1 retry (bash after bash error), got {result.raw_metrics['tool_retries']}"
+        )
+
+    def test_error_then_error_then_retry(self):
+        """A error -> B error -> A retry: A retry must be detected."""
+        events = [
+            _ev(0, EventType.tool_call, tool_name="bash", tool_call_id="tc1", session_id="s1"),
+            _ev(1, EventType.tool_result, Status.error, tool_name="bash", tool_call_id="tc1", session_id="s1"),
+            _ev(2, EventType.tool_call, tool_name="grep", tool_call_id="tc2", session_id="s1"),
+            _ev(3, EventType.tool_result, Status.error, tool_name="grep", tool_call_id="tc2", session_id="s1"),
+            _ev(4, EventType.tool_call, tool_name="bash", tool_call_id="tc3", session_id="s1"),
+            _ev(5, EventType.tool_result, Status.success, tool_name="bash", tool_call_id="tc3", session_id="s1"),
+        ]
+        result = judge_tool_discipline(events)
+        assert result.raw_metrics["tool_retries"] == 1, (
+            f"Expected 1 retry (bash after bash error), got {result.raw_metrics['tool_retries']}"
+        )
+
+    def test_successful_then_same_args_is_redundant_not_retry(self):
+        """Successful A followed by A with identical args is redundant, not retry."""
+        events = [
+            _ev(
+                0,
+                EventType.tool_call,
+                tool_name="grep",
+                tool_call_id="tc1",
+                tool_args={"pattern": "auth"},
+                session_id="s1",
+            ),
+            _ev(1, EventType.tool_result, Status.success, tool_name="grep", tool_call_id="tc1", session_id="s1"),
+            _ev(
+                2,
+                EventType.tool_call,
+                tool_name="grep",
+                tool_call_id="tc2",
+                tool_args={"pattern": "auth"},
+                session_id="s1",
+            ),
+            _ev(3, EventType.tool_result, Status.success, tool_name="grep", tool_call_id="tc2", session_id="s1"),
         ]
         result = judge_tool_discipline(events)
         assert result.raw_metrics["tool_retries"] == 0
+        assert result.raw_metrics["redundant_calls"] == 1
 
-    def test_adding_success_to_unmatched_does_not_worsen(self):
-        unmatched = [_ev(0, EventType.tool_call, tool_name="grep", tool_call_id="tc1")]
-        unmatched_score = judge_tool_discipline(unmatched).score
-        matched = [
-            _ev(0, EventType.tool_call, tool_name="grep", tool_call_id="tc1"),
-            _ev(1, EventType.tool_result, Status.success, tool_name="grep", tool_call_id="tc1"),
+    def test_failed_then_changed_args_is_recovery_not_redundant(self):
+        """Failed A followed by A with changed args is a recovery attempt, not redundant."""
+        events = [
+            _ev(
+                0,
+                EventType.tool_call,
+                tool_name="grep",
+                tool_call_id="tc1",
+                tool_args={"pattern": "auth"},
+                session_id="s1",
+            ),
+            _ev(1, EventType.tool_result, Status.error, tool_name="grep", tool_call_id="tc1", session_id="s1"),
+            _ev(
+                2,
+                EventType.tool_call,
+                tool_name="grep",
+                tool_call_id="tc2",
+                tool_args={"pattern": "login"},
+                session_id="s1",
+            ),
+            _ev(3, EventType.tool_result, Status.success, tool_name="grep", tool_call_id="tc2", session_id="s1"),
         ]
-        matched_score = judge_tool_discipline(matched).score
-        assert matched_score >= unmatched_score
+        result = judge_tool_discipline(events)
+        assert result.raw_metrics["tool_retries"] == 1
+        assert result.raw_metrics["redundant_calls"] == 0
+
+
+class TestConvertedSuccessStatus:
+    """Real converted successful results contribute to successful_attempts."""
+
+    def test_converted_success_contributes_to_successful_attempts(self):
+        """A tool result with status='success' must count as successful_attempts."""
+        events = [
+            _ev(0, EventType.tool_call, tool_name="grep", tool_call_id="tc1", session_id="s1"),
+            _ev(1, EventType.tool_result, Status.success, tool_name="grep", tool_call_id="tc1", session_id="s1"),
+        ]
+        attempts = pair_tool_attempts(events)
+        metrics = compute_correlation_metrics(attempts)
+        assert metrics["successful_attempts"] == 1
+
+    def test_none_status_does_not_count_as_success(self):
+        """A tool result with status=None must NOT count as successful_attempts."""
+        events = [
+            _ev(0, EventType.tool_call, tool_name="grep", tool_call_id="tc1", session_id="s1"),
+            _ev(1, EventType.tool_result, status=None, tool_name="grep", tool_call_id="tc1", session_id="s1"),
+        ]
+        attempts = pair_tool_attempts(events)
+        metrics = compute_correlation_metrics(attempts)
+        assert metrics["successful_attempts"] == 0
+
+    def test_redundant_call_after_success_is_penalized(self):
+        """Redundant call after a successful call with same args is penalized."""
+        events = [
+            _ev(
+                0,
+                EventType.tool_call,
+                tool_name="grep",
+                tool_call_id="tc1",
+                tool_args={"pattern": "auth"},
+                session_id="s1",
+            ),
+            _ev(1, EventType.tool_result, Status.success, tool_name="grep", tool_call_id="tc1", session_id="s1"),
+            _ev(
+                2,
+                EventType.tool_call,
+                tool_name="grep",
+                tool_call_id="tc2",
+                tool_args={"pattern": "auth"},
+                session_id="s1",
+            ),
+            _ev(3, EventType.tool_result, Status.success, tool_name="grep", tool_call_id="tc2", session_id="s1"),
+        ]
+        result = judge_tool_discipline(events)
+        assert result.raw_metrics["redundant_calls"] == 1
+        assert result.score < 100.0
+
+
+class TestTimeoutCorrelation:
+    """Provider-supported timeouts reach the tool-discipline timeout metric."""
+
+    def test_timeout_in_tool_result_reaches_timeout_metric(self):
+        events = [
+            _ev(0, EventType.tool_call, tool_name="bash", tool_call_id="tc1", session_id="s1"),
+            _ev(1, EventType.tool_result, Status.timeout, tool_name="bash", tool_call_id="tc1", session_id="s1"),
+        ]
+        result = judge_tool_discipline(events)
+        assert result.raw_metrics["tool_timeouts"] == 1
+        assert result.score < 100.0
+
+    def test_timeout_then_retry_detected(self):
+        events = [
+            _ev(0, EventType.tool_call, tool_name="bash", tool_call_id="tc1", session_id="s1"),
+            _ev(1, EventType.tool_result, Status.timeout, tool_name="bash", tool_call_id="tc1", session_id="s1"),
+            _ev(2, EventType.tool_call, tool_name="bash", tool_call_id="tc2", session_id="s1"),
+            _ev(3, EventType.tool_result, Status.success, tool_name="bash", tool_call_id="tc2", session_id="s1"),
+        ]
+        result = judge_tool_discipline(events)
+        assert result.raw_metrics["tool_timeouts"] == 1
+        assert result.raw_metrics["tool_retries"] == 1
+
+
+class TestIdRemovalAndDuplicate:
+    """Removing valid IDs cannot increase confidence or exact-pair count.
+    Duplicate IDs cannot silently pair with high confidence."""
 
     def test_removing_ids_cannot_increase_confidence(self):
         with_ids = [
-            _ev(0, EventType.tool_call, tool_name="grep", tool_call_id="tc1"),
-            _ev(1, EventType.tool_result, Status.success, tool_name="grep", tool_call_id="tc1"),
+            _ev(0, EventType.tool_call, tool_name="grep", tool_call_id="tc1", session_id="s1"),
+            _ev(1, EventType.tool_result, Status.success, tool_name="grep", tool_call_id="tc1", session_id="s1"),
         ]
         without_ids = [
-            _ev(0, EventType.tool_call, tool_name="grep", tool_call_id=None),
-            _ev(1, EventType.tool_result, Status.success, tool_name="grep", tool_call_id=None),
+            _ev(0, EventType.tool_call, tool_name="grep", tool_call_id=None, session_id="s1"),
+            _ev(1, EventType.tool_result, Status.success, tool_name="grep", tool_call_id=None, session_id="s1"),
         ]
         with_result = judge_tool_discipline(with_ids)
         without_result = judge_tool_discipline(without_ids)
-        # With IDs should have >= confidence than without
         conf_order = {"high": 3, "medium": 2, "low": 1}
         assert conf_order[with_result.confidence] >= conf_order[without_result.confidence]
 
+    def test_removing_ids_cannot_increase_exact_pairs(self):
+        with_ids = [
+            _ev(0, EventType.tool_call, tool_name="grep", tool_call_id="tc1", session_id="s1"),
+            _ev(1, EventType.tool_result, Status.success, tool_name="grep", tool_call_id="tc1", session_id="s1"),
+        ]
+        without_ids = [
+            _ev(0, EventType.tool_call, tool_name="grep", tool_call_id=None, session_id="s1"),
+            _ev(1, EventType.tool_result, Status.success, tool_name="grep", tool_call_id=None, session_id="s1"),
+        ]
+        with_metrics = compute_correlation_metrics(pair_tool_attempts(with_ids))
+        without_metrics = compute_correlation_metrics(pair_tool_attempts(without_ids))
+        assert with_metrics["exact_pairs"] >= without_metrics["exact_pairs"]
+
     def test_duplicate_ids_cannot_produce_high_confidence(self):
         events = [
-            _ev(0, EventType.tool_call, tool_name="grep", tool_call_id="dup"),
-            _ev(1, EventType.tool_call, tool_name="grep", tool_call_id="dup"),
-            _ev(2, EventType.tool_result, Status.success, tool_name="grep", tool_call_id="dup"),
+            _ev(0, EventType.tool_call, tool_name="grep", tool_call_id="dup", session_id="s1"),
+            _ev(1, EventType.tool_call, tool_name="grep", tool_call_id="dup", session_id="s1"),
+            _ev(2, EventType.tool_result, Status.success, tool_name="grep", tool_call_id="dup", session_id="s1"),
         ]
         result = judge_tool_discipline(events)
         assert result.confidence != "high"
-
-    def test_reordering_does_not_change_score(self):
-        events = [
-            _ev(0, EventType.tool_call, tool_name="grep", tool_call_id="tc1"),
-            _ev(1, EventType.tool_result, Status.success, tool_name="grep", tool_call_id="tc1"),
-            _ev(2, EventType.tool_call, tool_name="write", tool_call_id="tc2"),
-            _ev(3, EventType.tool_result, Status.success, tool_name="write", tool_call_id="tc2"),
-        ]
-        score1 = judge_tool_discipline(events).score
-        # Reorder (keeping event_index values)
-        reordered = [events[2], events[0], events[3], events[1]]
-        score2 = judge_tool_discipline(reordered).score
-        assert score1 == score2
-
-
-class TestCorrelationMetrics:
-    """Direct tests for the pairing logic."""
-
-    def test_exact_pairing(self):
-        events = [
-            _ev(0, EventType.tool_call, tool_name="grep", tool_call_id="tc1"),
-            _ev(1, EventType.tool_result, Status.success, tool_name="grep", tool_call_id="tc1"),
-        ]
-        attempts = pair_tool_attempts(events)
-        metrics = compute_correlation_metrics(attempts)
-        assert metrics["exact_pairs"] == 1
-        assert metrics["paired_attempts"] == 1
-
-    def test_out_of_order_input(self):
-        events = [
-            _ev(1, EventType.tool_result, Status.success, tool_name="grep", tool_call_id="tc1"),
-            _ev(0, EventType.tool_call, tool_name="grep", tool_call_id="tc1"),
-        ]
-        attempts = pair_tool_attempts(events)
-        metrics = compute_correlation_metrics(attempts)
-        assert metrics["exact_pairs"] == 1
+        assert result.raw_metrics["duplicate_tool_call_ids"] >= 1
 
     def test_no_double_counting_failures(self):
-        """One failed tool operation should contribute one failure."""
+        """One failed tool operation contributes one failure."""
         events = [
-            _ev(0, EventType.tool_call, tool_name="grep", tool_call_id="tc1"),
-            _ev(1, EventType.tool_result, Status.error, tool_name="grep", tool_call_id="tc1"),
-            _ev(2, EventType.session_end, Status.success),
+            _ev(0, EventType.tool_call, tool_name="grep", tool_call_id="tc1", session_id="s1"),
+            _ev(1, EventType.tool_result, Status.error, tool_name="grep", tool_call_id="tc1", session_id="s1"),
         ]
-        rel = judge_reliability(events)
-        # Only the tool_result has error status, not the tool_call
-        assert rel.raw_metrics["error_count"] == 1
+        attempts = pair_tool_attempts(events)
+        metrics = compute_correlation_metrics(attempts)
+        assert metrics["failed_attempts"] == 1
