@@ -56,6 +56,20 @@ class ConverterRegistry:
         self._entries: dict[str, ConverterEntry] = {}
         self._alias_map: dict[str, str] = {}  # alias -> canonical_name
         self._order: list[str] = []  # insertion order for determinism
+        self._sealed: bool = False
+
+    def seal(self) -> None:
+        """Seal the registry to prevent further registrations.
+
+        After sealing, register() raises RuntimeError.
+        Unsealing is intentional only for tests building fresh instances.
+        """
+        self._sealed = True
+
+    @property
+    def is_sealed(self) -> bool:
+        """Return whether the registry is sealed."""
+        return self._sealed
 
     def register(
         self,
@@ -64,7 +78,17 @@ class ConverterRegistry:
         converter: Callable[[Path], list[dict]],
         description: str = "",
     ) -> None:
-        """Register a converter. Raises ValueError on duplicate names/aliases."""
+        """Register a converter. Raises ValueError on any name collision.
+
+        Collision checks (all using normalized names):
+        - canonical vs existing canonical
+        - alias vs existing alias
+        - new canonical vs existing alias
+        - new alias vs existing canonical
+        - duplicate aliases within one registration
+        """
+        if self._sealed:
+            raise RuntimeError(f"Cannot register {canonical_name!r}: registry is sealed")
         entry = ConverterEntry(
             canonical_name=canonical_name,
             aliases=tuple(aliases),
@@ -81,18 +105,39 @@ class ConverterRegistry:
                 f"Duplicate converter canonical name: {canonical_name!r} (already registered as {existing!r})"
             )
 
-        # Check duplicate aliases
+        # Check new canonical vs existing alias
+        if canonical_norm in self._alias_map:
+            existing_canonical = self._alias_map[canonical_norm]
+            raise ValueError(
+                f"Converter canonical name {canonical_name!r} conflicts with existing alias "
+                f"(already claimed by {existing_canonical!r})"
+            )
+
+        # Normalize all aliases and check for collisions
+        normalized_aliases: list[str] = []
         for alias in aliases:
             alias_norm = alias.lower().replace("-", "_").replace(" ", "_")
+
+            # Check duplicate alias within this registration
+            if alias_norm in normalized_aliases:
+                raise ValueError(f"Duplicate converter alias within registration: {alias!r}")
+
+            # Check alias vs existing alias
             if alias_norm in self._alias_map:
                 existing_canonical = self._alias_map[alias_norm]
                 raise ValueError(f"Duplicate converter alias: {alias!r} (already claimed by {existing_canonical!r})")
 
+            # Check alias vs existing canonical
+            if alias_norm in self._entries:
+                existing = self._entries[alias_norm].canonical_name
+                raise ValueError(f"Converter alias {alias!r} conflicts with existing canonical name {existing!r}")
+
+            normalized_aliases.append(alias_norm)
+
         # Register
         self._entries[canonical_norm] = entry
         self._order.append(canonical_norm)
-        for alias in aliases:
-            alias_norm = alias.lower().replace("-", "_").replace(" ", "_")
+        for alias_norm in normalized_aliases:
             self._alias_map[alias_norm] = canonical_norm
 
     def get(self, name: str) -> Callable[[Path], list[dict]]:
@@ -129,8 +174,16 @@ class ConverterRegistry:
 
     @property
     def all_aliases(self) -> dict[str, str]:
-        """Return all aliases mapped to their canonical names."""
-        return dict(self._alias_map)
+        """Return all aliases mapped to their declared canonical names.
+
+        Keys are the original alias strings as registered. Values are the
+        declared canonical names (not internal normalized keys).
+        """
+        result: dict[str, str] = {}
+        for entry in self._entries.values():
+            for alias in entry.aliases:
+                result[alias] = entry.canonical_name
+        return result
 
     def entries(self) -> list[ConverterEntry]:
         """Return all entries in registration order."""
@@ -175,6 +228,19 @@ class JudgeRegistry:
     def __init__(self) -> None:
         self._entries: dict[str, JudgeEntry] = {}
         self._order: list[str] = []  # insertion order
+        self._sealed: bool = False
+
+    def seal(self) -> None:
+        """Seal the registry to prevent further registrations.
+
+        After sealing, register() raises RuntimeError.
+        """
+        self._sealed = True
+
+    @property
+    def is_sealed(self) -> bool:
+        """Return whether the registry is sealed."""
+        return self._sealed
 
     def register(
         self,
@@ -184,6 +250,9 @@ class JudgeRegistry:
         order: int = 0,
     ) -> None:
         """Register a judge. Raises ValueError on duplicate dimension key."""
+        if self._sealed:
+            raise RuntimeError(f"Cannot register {dimension_key!r}: registry is sealed")
+
         if dimension_key in self._entries:
             existing = self._entries[dimension_key]
             raise ValueError(
@@ -245,11 +314,14 @@ class JudgeRegistry:
         ]
 
     def get_judge_dict(self) -> dict[str, Callable[[list], object]]:
-        """Return {dimension_key: judge_callable} in registration order.
+        """Return {dimension_key: judge_callable} in stable output order.
 
-        This is the format expected by compute_scorecard().
+        Order is determined by the ``order`` field on each entry, then
+        alphabetically by dimension key. This is independent of
+        registration order and matches the contract expected by
+        compute_scorecard().
         """
-        return {k: self._entries[k].judge for k in self._order}
+        return {k: self._entries[k].judge for k in self.ordered_keys}
 
     def __len__(self) -> int:
         return len(self._entries)

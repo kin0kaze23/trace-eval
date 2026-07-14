@@ -12,6 +12,7 @@ Usage:
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -648,48 +649,14 @@ def _detect_format(input_path: Path) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Backward-compatible CONVERTERS dict (kept for existing callers)
+# Typed converter registry — single source of truth
 # ---------------------------------------------------------------------------
 
-CONVERTERS = {
-    "claude-code": convert_claude_code,
-    "claude_code": convert_claude_code,
-    "openclaw": convert_openclaw,
-    "cursor": convert_cursor,
-}
-
-
-def convert(input_path: Path, fmt: str | None = None) -> list[dict]:
-    """Convert a trace file to canonical events."""
-    if fmt is None:
-        fmt = _detect_format(input_path)
-
-    if fmt == "canonical":
-        # Already canonical, just return as-is
-        events = []
-        with open(input_path) as f:
-            for line in f:
-                line = line.strip()
-                if line:
-                    events.append(json.loads(line))
-        return events
-
-    converter = CONVERTERS.get(fmt)
-    if converter is None:
-        raise ValueError(f"Unknown format: {fmt}. Supported: {list(CONVERTERS.keys())}")
-
-    return converter(input_path)
-
-
-# ---------------------------------------------------------------------------
-# Register converters in the typed registry
-# ---------------------------------------------------------------------------
-
-from trace_eval.registry import CONVERTER_REGISTRY  # noqa: E402
+from trace_eval.registry import CONVERTER_REGISTRY  # noqa: E402 — must follow converter defs
 
 CONVERTER_REGISTRY.register(
     canonical_name="claude-code",
-    aliases=["claude_code", "claude-code"],
+    aliases=["claude_code"],
     converter=convert_claude_code,
     description="Claude Code sessions (.jsonl from ~/.claude/projects/)",
 )
@@ -707,3 +674,55 @@ CONVERTER_REGISTRY.register(
     converter=convert_cursor,
     description="Cursor agent transcripts (.jsonl)",
 )
+
+# Seal to prevent accidental mutation of built-in registrations
+CONVERTER_REGISTRY.seal()
+
+
+# ---------------------------------------------------------------------------
+# Backward-compatible CONVERTERS dict (derived from registry)
+# ---------------------------------------------------------------------------
+
+
+def _build_converters_dict() -> dict[str, Callable[[Path], list[dict]]]:
+    """Build backward-compatible CONVERTERS dict from registry.
+
+    Includes canonical names and all aliases for legacy callers.
+    """
+    result: dict[str, Callable[[Path], list[dict]]] = {}
+    for entry in CONVERTER_REGISTRY.entries():
+        result[entry.canonical_name] = entry.converter
+        for alias in entry.aliases:
+            result[alias] = entry.converter
+    return result
+
+
+CONVERTERS = _build_converters_dict()
+
+
+def convert(input_path: Path, fmt: str | None = None) -> list[dict]:
+    """Convert a trace file to canonical events.
+
+    Dispatches through the typed CONVERTER_REGISTRY (single source of truth).
+    Canonical format is a special passthrough case.
+    """
+    if fmt is None:
+        fmt = _detect_format(input_path)
+
+    if fmt == "canonical":
+        # Already canonical, just return as-is
+        events = []
+        with open(input_path) as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    events.append(json.loads(line))
+        return events
+
+    try:
+        converter = CONVERTER_REGISTRY.get(fmt)
+    except KeyError:
+        supported = CONVERTER_REGISTRY.canonical_names
+        raise ValueError(f"Unknown format: {fmt}. Supported: {supported}") from None
+
+    return converter(input_path)
