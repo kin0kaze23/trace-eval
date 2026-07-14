@@ -3,16 +3,19 @@
 Provides deterministic lookup, alias normalization, duplicate rejection,
 and clear error messages for unsupported formats.
 
-Usage:
-    from trace_eval.registry import CONVERTER_REGISTRY, JUDGE_REGISTRY
+This module contains registry classes and entry types only.
+Populated singletons live in their owning modules:
 
-    # Converter lookup
+- ``trace_eval.convert.CONVERTER_REGISTRY`` — converter registry
+- ``trace_eval.judges.registry.JUDGE_REGISTRY`` — judge registry
+
+Usage::
+
+    from trace_eval.convert import CONVERTER_REGISTRY
     converter = CONVERTER_REGISTRY.get("claude-code")
-    events = converter(input_path)
 
-    # Judge lookup
+    from trace_eval.judges.registry import JUDGE_REGISTRY
     judge = JUDGE_REGISTRY.get("reliability")
-    result = judge(events)
 """
 
 from collections.abc import Callable
@@ -86,6 +89,7 @@ class ConverterRegistry:
         - new canonical vs existing alias
         - new alias vs existing canonical
         - duplicate aliases within one registration
+        - alias that normalizes to the new entry's own canonical name
         """
         if self._sealed:
             raise RuntimeError(f"Cannot register {canonical_name!r}: registry is sealed")
@@ -117,6 +121,14 @@ class ConverterRegistry:
         normalized_aliases: list[str] = []
         for alias in aliases:
             alias_norm = alias.lower().replace("-", "_").replace(" ", "_")
+
+            # Check alias equivalent to own canonical name
+            if alias_norm == canonical_norm:
+                raise ValueError(
+                    f"Converter alias {alias!r} normalizes to the same name as "
+                    f"canonical {canonical_name!r} — lookup works via hyphen/underscore "
+                    f"normalization without an explicit alias"
+                )
 
             # Check duplicate alias within this registration
             if alias_norm in normalized_aliases:
@@ -328,11 +340,3 @@ class JudgeRegistry:
 
     def __contains__(self, dimension_key: str) -> bool:
         return dimension_key in self._entries
-
-
-# ---------------------------------------------------------------------------
-# Global singleton instances
-# ---------------------------------------------------------------------------
-
-CONVERTER_REGISTRY = ConverterRegistry()
-JUDGE_REGISTRY = JudgeRegistry()

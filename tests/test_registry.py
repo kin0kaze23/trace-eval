@@ -63,9 +63,10 @@ class TestConverterRegistry:
         """Hyphens and underscores are equivalent in lookup."""
         reg = ConverterRegistry()
         dummy = lambda p: []  # noqa: E731
-        reg.register("claude-code", aliases=["claude_code"], converter=dummy)
-        assert reg.get("claude_code") is dummy
-        assert reg.get("claude-code") is dummy
+        reg.register("my-format", aliases=[], converter=dummy)
+        # Lookup works with either hyphens or underscores
+        assert reg.get("my-format") is dummy
+        assert reg.get("my_format") is dummy
 
     def test_unknown_format_raises_key_error(self):
         """Unknown format raises KeyError with supported formats."""
@@ -123,6 +124,15 @@ class TestConverterRegistry:
 
         with pytest.raises(ValueError, match="Duplicate converter alias within registration"):
             reg.register("format-a", aliases=["al", "AL"], converter=dummy)
+
+    def test_alias_equivalent_to_canonical_rejected(self):
+        """Alias that normalizes to the same name as canonical is rejected."""
+        reg = ConverterRegistry()
+        dummy = lambda p: []  # noqa: E731
+
+        # "claude_code" normalizes to "claude_code" which equals canonical "claude-code" normalized
+        with pytest.raises(ValueError, match="normalizes to the same name as canonical"):
+            reg.register("claude-code", aliases=["claude_code"], converter=dummy)
 
     def test_is_supported(self):
         """is_supported returns True for registered formats."""
@@ -294,12 +304,25 @@ class TestGlobalConverterRegistry:
 
     def test_convert_dispatches_through_registry(self):
         """convert() dispatches through CONVERTER_REGISTRY, not legacy dict."""
-        from trace_eval.convert import CONVERTER_REGISTRY
+        from pathlib import Path
+        from unittest.mock import patch
 
-        # We can't easily test with real files, but we can verify the path
-        # by checking that the registry is the authoritative source
-        assert CONVERTER_REGISTRY.is_supported("claude-code")
-        assert CONVERTER_REGISTRY.get("claude-code") is not None
+        from trace_eval.convert import CONVERTER_REGISTRY, convert
+
+        sentinel = lambda p: [{"event": "sentinel"}]  # noqa: E731
+
+        # Monkeypatch the registry's get() to return our sentinel
+        original_get = CONVERTER_REGISTRY.get
+
+        def mock_get(name: str):
+            if name == "test-format":
+                return sentinel
+            return original_get(name)
+
+        with patch.object(CONVERTER_REGISTRY, "get", side_effect=mock_get):
+            result = convert(Path("dummy.jsonl"), fmt="test-format")
+
+        assert result == [{"event": "sentinel"}]
 
 
 # ---------------------------------------------------------------------------
@@ -587,3 +610,25 @@ class TestGlobalJudgeRegistry:
             # Restore CLI module if it was present
             if cli_module is not None:
                 sys.modules["trace_eval.cli"] = cli_module
+
+
+class TestRegistryModuleStructure:
+    """Test that registry.py contains only classes, no populated singletons."""
+
+    def test_registry_module_has_no_singletons(self):
+        """trace_eval.registry does not export CONVERTER_REGISTRY or JUDGE_REGISTRY."""
+        import trace_eval.registry as reg_mod
+
+        assert not hasattr(reg_mod, "CONVERTER_REGISTRY"), (
+            "CONVERTER_REGISTRY should not be in trace_eval.registry — import from trace_eval.convert instead"
+        )
+        assert not hasattr(reg_mod, "JUDGE_REGISTRY"), (
+            "JUDGE_REGISTRY should not be in trace_eval.registry — import from trace_eval.judges.registry instead"
+        )
+
+    def test_registry_module_has_classes(self):
+        """trace_eval.registry exports ConverterRegistry and JudgeRegistry classes."""
+        from trace_eval.registry import ConverterRegistry, JudgeRegistry
+
+        assert ConverterRegistry is not None
+        assert JudgeRegistry is not None

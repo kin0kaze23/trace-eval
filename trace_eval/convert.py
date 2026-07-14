@@ -652,11 +652,17 @@ def _detect_format(input_path: Path) -> str:
 # Typed converter registry — single source of truth
 # ---------------------------------------------------------------------------
 
-from trace_eval.registry import CONVERTER_REGISTRY  # noqa: E402 — must follow converter defs
+from trace_eval.registry import ConverterRegistry  # noqa: E402 — must follow converter defs
+
+# ---------------------------------------------------------------------------
+# Populated singleton — single source of truth for converter dispatch
+# ---------------------------------------------------------------------------
+
+CONVERTER_REGISTRY = ConverterRegistry()
 
 CONVERTER_REGISTRY.register(
     canonical_name="claude-code",
-    aliases=["claude_code"],
+    aliases=[],
     converter=convert_claude_code,
     description="Claude Code sessions (.jsonl from ~/.claude/projects/)",
 )
@@ -688,12 +694,17 @@ def _build_converters_dict() -> dict[str, Callable[[Path], list[dict]]]:
     """Build backward-compatible CONVERTERS dict from registry.
 
     Includes canonical names and all aliases for legacy callers.
+    Also adds legacy underscore variants for backward compatibility
+    (e.g., ``claude_code`` alongside ``claude-code``).
     """
     result: dict[str, Callable[[Path], list[dict]]] = {}
     for entry in CONVERTER_REGISTRY.entries():
         result[entry.canonical_name] = entry.converter
         for alias in entry.aliases:
             result[alias] = entry.converter
+        # Legacy: add underscore variant for hyphenated canonical names
+        if "-" in entry.canonical_name:
+            result[entry.canonical_name.replace("-", "_")] = entry.converter
     return result
 
 
