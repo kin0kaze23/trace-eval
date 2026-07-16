@@ -9,11 +9,7 @@ from pathlib import Path
 
 from trace_eval import __version__
 from trace_eval.convert import CONVERTERS, _detect_format, convert
-from trace_eval.judges.context import judge_context
-from trace_eval.judges.efficiency import judge_efficiency
-from trace_eval.judges.reliability import judge_reliability
-from trace_eval.judges.retrieval import judge_retrieval
-from trace_eval.judges.tool_discipline import judge_tool_discipline
+from trace_eval.judges.registry import JUDGE_REGISTRY
 from trace_eval.loader import load_trace_with_report
 from trace_eval.report import format_json, format_summary, format_text
 from trace_eval.scoring import (
@@ -21,13 +17,11 @@ from trace_eval.scoring import (
     compute_scorecard,
 )
 
-JUDGES = {
-    "reliability": judge_reliability,
-    "efficiency": judge_efficiency,
-    "retrieval": judge_retrieval,
-    "tool_discipline": judge_tool_discipline,
-    "context": judge_context,
-}
+# ---------------------------------------------------------------------------
+# Backward-compatible JUDGES dict (derived from registry, ordered)
+# ---------------------------------------------------------------------------
+
+JUDGES = JUDGE_REGISTRY.get_judge_dict()
 
 SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3}
 

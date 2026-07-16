@@ -12,6 +12,7 @@ Usage:
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -657,16 +658,75 @@ def _detect_format(input_path: Path) -> str:
     return "unknown"
 
 
-CONVERTERS = {
-    "claude-code": convert_claude_code,
-    "claude_code": convert_claude_code,
-    "openclaw": convert_openclaw,
-    "cursor": convert_cursor,
-}
+# ---------------------------------------------------------------------------
+# Typed converter registry — single source of truth
+# ---------------------------------------------------------------------------
+
+from trace_eval.registry import ConverterRegistry  # noqa: E402 — must follow converter defs
+
+# ---------------------------------------------------------------------------
+# Populated singleton — single source of truth for converter dispatch
+# ---------------------------------------------------------------------------
+
+CONVERTER_REGISTRY = ConverterRegistry()
+
+CONVERTER_REGISTRY.register(
+    canonical_name="claude-code",
+    aliases=[],
+    converter=convert_claude_code,
+    description="Claude Code sessions (.jsonl from ~/.claude/projects/)",
+)
+
+CONVERTER_REGISTRY.register(
+    canonical_name="openclaw",
+    aliases=[],
+    converter=convert_openclaw,
+    description="OpenClaw sessions (.jsonl from ~/.openclaw/)",
+)
+
+CONVERTER_REGISTRY.register(
+    canonical_name="cursor",
+    aliases=[],
+    converter=convert_cursor,
+    description="Cursor agent transcripts (.jsonl)",
+)
+
+# Seal to prevent accidental mutation of built-in registrations
+CONVERTER_REGISTRY.seal()
+
+
+# ---------------------------------------------------------------------------
+# Backward-compatible CONVERTERS dict (derived from registry)
+# ---------------------------------------------------------------------------
+
+
+def _build_converters_dict() -> dict[str, Callable[[Path], list[dict]]]:
+    """Build backward-compatible CONVERTERS dict from registry.
+
+    Includes canonical names and all aliases for legacy callers.
+    Also adds legacy underscore variants for backward compatibility
+    (e.g., ``claude_code`` alongside ``claude-code``).
+    """
+    result: dict[str, Callable[[Path], list[dict]]] = {}
+    for entry in CONVERTER_REGISTRY.entries():
+        result[entry.canonical_name] = entry.converter
+        for alias in entry.aliases:
+            result[alias] = entry.converter
+        # Legacy: add underscore variant for hyphenated canonical names
+        if "-" in entry.canonical_name:
+            result[entry.canonical_name.replace("-", "_")] = entry.converter
+    return result
+
+
+CONVERTERS = _build_converters_dict()
 
 
 def convert(input_path: Path, fmt: str | None = None) -> list[dict]:
-    """Convert a trace file to canonical events."""
+    """Convert a trace file to canonical events.
+
+    Dispatches through the typed CONVERTER_REGISTRY (single source of truth).
+    Canonical format is a special passthrough case.
+    """
     if fmt is None:
         fmt = _detect_format(input_path)
 
@@ -680,8 +740,10 @@ def convert(input_path: Path, fmt: str | None = None) -> list[dict]:
                     events.append(json.loads(line))
         return events
 
-    converter = CONVERTERS.get(fmt)
-    if converter is None:
-        raise ValueError(f"Unknown format: {fmt}. Supported: {list(CONVERTERS.keys())}")
+    try:
+        converter = CONVERTER_REGISTRY.get(fmt)
+    except KeyError:
+        supported = CONVERTER_REGISTRY.canonical_names
+        raise ValueError(f"Unknown format: {fmt}. Supported: {supported}") from None
 
     return converter(input_path)
